@@ -23,9 +23,10 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     container_name: invoice_backend
+    env_file:
+      - ./backend/.env
     environment:
       DATABASE_URL: postgresql+asyncpg://postgres:postgres@db:5432/invoice_db
-      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       DEBUG: "true"
     volumes:
       - ./backend:/app

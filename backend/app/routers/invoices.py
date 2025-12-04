@@ -1,5 +1,6 @@
 from typing import Optional, List
 from io import BytesIO
+from datetime import date
 from fastapi import APIRouter, Depends, UploadFile, File, HTTPException, Query, BackgroundTasks
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -129,9 +130,17 @@ async def list_invoices(
     if owner:
         query = query.where(Invoice.owner == owner)
     if start_date:
-        query = query.where(Invoice.issue_date >= start_date)
+        try:
+            start_date_obj = date.fromisoformat(start_date)
+            query = query.where(Invoice.issue_date >= start_date_obj)
+        except ValueError:
+            pass  # Invalid date format, skip filter
     if end_date:
-        query = query.where(Invoice.issue_date <= end_date)
+        try:
+            end_date_obj = date.fromisoformat(end_date)
+            query = query.where(Invoice.issue_date <= end_date_obj)
+        except ValueError:
+            pass  # Invalid date format, skip filter
 
     # Count total
     count_query = select(func.count()).select_from(query.subquery())
@@ -552,7 +561,7 @@ async def confirm_invoice(
     invoice_id: int,
     db: AsyncSession = Depends(get_db)
 ):
-    """确认发票，标记所有差异为已解决"""
+    """确认发票，标记所有差异为已解决。LLM比对是必须的。"""
     # Get invoice
     invoice_query = select(Invoice).where(Invoice.id == invoice_id)
     invoice_result = await db.execute(invoice_query)
@@ -561,11 +570,29 @@ async def confirm_invoice(
     if not invoice:
         raise HTTPException(status_code=404, detail="发票不存在")
 
-    # Mark all diffs as resolved
+    # Check if LLM result exists - LLM comparison is MANDATORY
+    llm_query = select(LlmResult).where(LlmResult.invoice_id == invoice_id)
+    llm_result = await db.execute(llm_query)
+    llm = llm_result.scalar_one_or_none()
+
+    if not llm:
+        raise HTTPException(
+            status_code=400,
+            detail="无法确认：缺少LLM比对结果。请先配置OpenAI API密钥并重新解析发票。"
+        )
+
+    # Get parsing diffs to verify comparison exists
     diffs_query = select(ParsingDiff).where(ParsingDiff.invoice_id == invoice_id)
     diffs_result = await db.execute(diffs_query)
     diffs = diffs_result.scalars().all()
 
+    if not diffs:
+        raise HTTPException(
+            status_code=400,
+            detail="无法确认：缺少OCR和LLM的比对结果。请重新解析发票。"
+        )
+
+    # Mark all diffs as resolved
     for diff in diffs:
         if diff.resolved == 0:
             # Use existing final_value or ocr_value as default

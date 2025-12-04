@@ -5,7 +5,10 @@ import type {
   InvoiceListResponse,
   Statistics,
   UploadResponse,
-  InvoiceStatus
+  LLMStatusResponse,
+  LLMConfigRequest,
+  LLMConfigResponse,
+  LLMTestResponse,
 } from '../types/invoice';
 
 const api = axios.create({
@@ -148,6 +151,38 @@ export const reprocessInvoice = async (
   invoiceId: number
 ): Promise<{ message: string; invoice_id: number }> => {
   const response = await api.post(`/invoices/${invoiceId}/process`);
+  return response.data;
+};
+
+// Batch reprocess invoices (clear old results and re-run OCR/LLM)
+export const batchReprocessInvoices = async (
+  invoiceIds: number[]
+): Promise<{ message: string; count: number }> => {
+  const response = await api.post('/invoices/batch-reprocess', {
+    invoice_ids: invoiceIds,
+  });
+  return response.data;
+};
+
+// LLM Configuration APIs
+
+// Get LLM status
+export const getLLMStatus = async (): Promise<LLMStatusResponse> => {
+  const response = await api.get('/settings/llm/status');
+  return response.data;
+};
+
+// Configure LLM provider
+export const configureLLM = async (
+  config: LLMConfigRequest
+): Promise<LLMConfigResponse> => {
+  const response = await api.post('/settings/llm/configure', config);
+  return response.data;
+};
+
+// Test LLM connection
+export const testLLMConnection = async (): Promise<LLMTestResponse> => {
+  const response = await api.post('/settings/llm/test');
   return response.data;
 };
 

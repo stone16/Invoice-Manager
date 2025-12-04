@@ -15,8 +15,10 @@ import {
   Input,
   Select,
   Modal,
+  Alert,
+  Tooltip,
 } from 'antd';
-import { ArrowLeftOutlined, EditOutlined, SaveOutlined, CheckOutlined, SyncOutlined } from '@ant-design/icons';
+import { ArrowLeftOutlined, EditOutlined, SaveOutlined, CheckOutlined, SyncOutlined, WarningOutlined } from '@ant-design/icons';
 import { getInvoice, getInvoiceFileUrl, updateInvoice, resolveDiff, confirmInvoice, reprocessInvoice } from '../services/api';
 import type { InvoiceDetail, ParsingDiff } from '../types/invoice';
 import { InvoiceStatus } from '../types/invoice';
@@ -115,11 +117,26 @@ function InvoiceDetailPage() {
 
   const handleConfirmAll = async () => {
     if (!id) return;
+
+    // Check if LLM result exists before attempting confirmation
+    if (!invoice?.llm_result) {
+      message.error('无法确认：缺少LLM比对结果。请先配置OpenAI API密钥并重新解析发票。');
+      return;
+    }
+
     try {
       await confirmInvoice(parseInt(id));
       message.success('发票已确认');
       fetchInvoice();
-    } catch (error) {
+    } catch (error: unknown) {
+      // Handle specific error from backend
+      if (error && typeof error === 'object' && 'response' in error) {
+        const axiosError = error as { response?: { data?: { detail?: string } } };
+        if (axiosError.response?.data?.detail) {
+          message.error(axiosError.response.data.detail);
+          return;
+        }
+      }
       message.error('确认失败');
     }
   };
@@ -409,41 +426,72 @@ function InvoiceDetailPage() {
             )}
           </Card>
 
-          {/* Parsing Diffs */}
-          {invoice.parsing_diffs && invoice.parsing_diffs.length > 0 && (
-            <Card
-              title={
-                <Space>
-                  <span>解析差异</span>
-                  {invoice.parsing_diffs.some(d => !d.resolved) && (
-                    <Tag color="warning">
-                      {invoice.parsing_diffs.filter(d => !d.resolved).length} 项待确认
-                    </Tag>
-                  )}
-                </Space>
-              }
-              extra={
-                <Space>
+          {/* LLM Comparison Section - Mandatory for confirmation */}
+          <Card
+            title={
+              <Space>
+                <span>OCR与LLM比对结果</span>
+                {!invoice.llm_result && (
+                  <Tag color="error" icon={<WarningOutlined />}>
+                    缺少LLM比对
+                  </Tag>
+                )}
+                {invoice.llm_result && invoice.parsing_diffs && invoice.parsing_diffs.some(d => !d.resolved) && (
+                  <Tag color="warning">
+                    {invoice.parsing_diffs.filter(d => !d.resolved).length} 项待确认
+                  </Tag>
+                )}
+                {invoice.llm_result && invoice.parsing_diffs && !invoice.parsing_diffs.some(d => !d.resolved) && (
+                  <Tag color="success">
+                    已完成比对
+                  </Tag>
+                )}
+              </Space>
+            }
+            extra={
+              <Space>
+                <Button
+                  icon={<SyncOutlined />}
+                  onClick={handleReprocess}
+                  loading={loading}
+                >
+                  重新解析
+                </Button>
+                {invoice.llm_result && invoice.parsing_diffs && invoice.parsing_diffs.some(d => !d.resolved) && (
                   <Button
-                    icon={<SyncOutlined />}
-                    onClick={handleReprocess}
-                    loading={loading}
+                    type="primary"
+                    icon={<CheckOutlined />}
+                    onClick={handleConfirmAll}
                   >
-                    重新解析
+                    全部确认
                   </Button>
-                  {invoice.parsing_diffs.some(d => !d.resolved) && (
+                )}
+                {!invoice.llm_result && (
+                  <Tooltip title="需要先完成LLM比对才能确认发票">
                     <Button
                       type="primary"
                       icon={<CheckOutlined />}
-                      onClick={handleConfirmAll}
+                      disabled
                     >
                       全部确认
                     </Button>
-                  )}
-                </Space>
-              }
-              style={{ marginTop: 16 }}
-            >
+                  </Tooltip>
+                )}
+              </Space>
+            }
+            style={{ marginTop: 16 }}
+          >
+            {!invoice.llm_result && (
+              <Alert
+                message="缺少LLM比对结果"
+                description="确认发票前必须完成OCR和LLM的比对。请检查OpenAI API密钥是否已配置，然后点击'重新解析'按钮。"
+                type="warning"
+                showIcon
+                icon={<WarningOutlined />}
+                style={{ marginBottom: 16 }}
+              />
+            )}
+            {invoice.parsing_diffs && invoice.parsing_diffs.length > 0 ? (
               <Table
                 rowKey="id"
                 columns={diffColumns}
@@ -451,8 +499,12 @@ function InvoiceDetailPage() {
                 pagination={false}
                 size="small"
               />
-            </Card>
-          )}
+            ) : (
+              <div style={{ textAlign: 'center', padding: '20px', color: '#999' }}>
+                {invoice.llm_result ? '无比对差异' : '暂无比对数据，请重新解析'}
+              </div>
+            )}
+          </Card>
 
           {/* Custom Value Modal */}
           <Modal
