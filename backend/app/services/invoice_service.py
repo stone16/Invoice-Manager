@@ -133,7 +133,7 @@ async def process_invoice(invoice_id: int, db: AsyncSession) -> bool:
         has_conflicts = any(d['needs_review'] for d in diffs)
 
         # Check for missing critical fields (these require review)
-        critical_fields = ['invoice_number', 'issue_date', 'total_with_tax', 'seller_name']
+        critical_fields = ['invoice_number', 'issue_date', 'total_with_tax', 'buyer_name', 'seller_name']
         missing_critical = any(not final_fields.get(f) for f in critical_fields)
 
         needs_review = has_conflicts or missing_critical

@@ -159,10 +159,52 @@ class FieldExtractor:
         'amount': r'(?:Subtotal)[:\s]*\$?\s*([\d,.]+)',
     }
 
+    # Fallback patterns for buyer/seller when primary patterns fail
+    FALLBACK_PATTERNS_CN = {
+        'buyer_name': [
+            # Pattern: 购买方 section with 名称 on same or next line
+            r'购买方[^\n]*\n[^\n]*名\s*称[：:]\s*([^\n]+)',
+            # Pattern: 购 followed by 名称 (split across lines)
+            r'购\n[^\n]*名\s*称[：:]\s*([^\n]+)',
+            # Pattern: Direct "购买方名称：" format
+            r'购买方\s*名\s*称[：:]\s*([^\n]+)',
+            # Pattern: Look for content after 名称 in buyer section (top of invoice)
+            r'^[^\n]*名\s*称[：:]\s*([^\n]+?)(?=\n.*纳税人)',
+        ],
+        'seller_name': [
+            # Pattern: 销售方 section with 名称 on same or next line
+            r'销售方[^\n]*\n[^\n]*名\s*称[：:]\s*([^\n]+)',
+            # Pattern: 销 followed by 名称 (split across lines)
+            r'销\n[^\n]*名\s*称[：:]\s*([^\n]+)',
+            # Pattern: Direct "销售方名称：" format
+            r'销售方\s*名\s*称[：:]\s*([^\n]+)',
+        ],
+    }
+
     def _is_chinese_invoice(self, text: str) -> bool:
         """Detect if the invoice is in Chinese."""
         chinese_keywords = ['发票', '购买方', '销售方', '税额', '价税合计', '纳税人']
         return any(kw in text for kw in chinese_keywords)
+
+    def _try_fallback_patterns(self, text: str, field_name: str) -> Optional[str]:
+        """Try fallback patterns for fields that weren't matched by primary patterns."""
+        if field_name not in self.FALLBACK_PATTERNS_CN:
+            return None
+
+        for pattern in self.FALLBACK_PATTERNS_CN[field_name]:
+            try:
+                match = re.search(pattern, text, re.IGNORECASE | re.MULTILINE)
+                if match:
+                    value = match.group(1).strip()
+                    # Clean up common trailing characters
+                    value = re.sub(r'\s*(纳税人|统一|地址|开户|电话).*$', '', value)
+                    if value:
+                        logger.info(f"Fallback pattern matched for {field_name}: {value[:30]}...")
+                        return value
+            except Exception as e:
+                logger.warning(f"Fallback pattern failed for {field_name}: {e}")
+
+        return None
 
     def extract_fields(self, text: str) -> Dict[str, Any]:
         """Extract all invoice fields from OCR text.
@@ -174,6 +216,9 @@ class FieldExtractor:
             Dictionary of extracted fields
         """
         fields = {}
+
+        # Log OCR text for debugging (first 500 chars)
+        logger.debug(f"OCR text (first 500 chars): {text[:500]}")
 
         # Choose pattern set based on language detection
         if self._is_chinese_invoice(text):
@@ -192,6 +237,17 @@ class FieldExtractor:
             except Exception as e:
                 logger.warning(f"Failed to extract {field_name}: {e}")
                 fields[field_name] = None
+
+        # Try fallback patterns for critical fields that weren't found
+        if self._is_chinese_invoice(text):
+            for field_name in ['buyer_name', 'seller_name']:
+                if not fields.get(field_name):
+                    fallback_value = self._try_fallback_patterns(text, field_name)
+                    if fallback_value:
+                        fields[field_name] = fallback_value
+
+        # Log extraction results for debugging
+        logger.info(f"OCR extracted: buyer={fields.get('buyer_name')}, seller={fields.get('seller_name')}")
 
         return fields
 
