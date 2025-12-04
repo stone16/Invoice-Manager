@@ -15,3 +15,28 @@ body {
 #root {
   min-height: 100vh;
 }
+
+/* Resizable table column styles */
+.react-resizable {
+  position: relative;
+  background-clip: padding-box;
+}
+
+.react-resizable-handle {
+  position: absolute;
+  right: -5px;
+  bottom: 0;
+  z-index: 1;
+  width: 10px;
+  height: 100%;
+  cursor: col-resize;
+}
+
+.react-resizable-handle:hover {
+  background-color: rgba(0, 0, 0, 0.06);
+}
+
+/* Ensure ant-design table header cells work with resizable */
+.ant-table-thead > tr > th.react-resizable {
+  background-clip: padding-box;
+}

@@ -1,9 +1,11 @@
 """Invoice processing service."""
 
+import asyncio
 import logging
+from concurrent.futures import ThreadPoolExecutor
 from typing import Optional, Dict, Any, List, Tuple
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, delete
 
 from app.models.invoice import Invoice, OcrResult, LlmResult, ParsingDiff, InvoiceStatus
 from app.services.ocr_service import get_ocr_service, get_field_extractor
@@ -12,6 +14,13 @@ from app.config import get_settings
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
+
+# Separate thread pools for OCR and LLM to maximize throughput
+# OCR is CPU-bound (image processing), LLM is I/O-bound (API calls)
+# Using separate pools prevents one from blocking the other
+_ocr_executor = ThreadPoolExecutor(max_workers=settings.ocr_max_workers)
+_llm_executor = ThreadPoolExecutor(max_workers=settings.llm_max_workers)
+logger.info(f"Initialized thread pools: OCR={settings.ocr_max_workers}, LLM={settings.llm_max_workers}")
 
 # Fields to compare between OCR and LLM
 COMPARABLE_FIELDS = [
@@ -29,8 +38,84 @@ COMPARABLE_FIELDS = [
 ]
 
 
+def _run_ocr(file_data: bytes, file_type: str) -> Tuple[str, float, Dict[str, Any]]:
+    """Run OCR processing in a separate thread.
+
+    Args:
+        file_data: Raw file bytes
+        file_type: File type (pdf, jpg, png, etc.)
+
+    Returns:
+        Tuple of (raw_text, confidence, extracted_fields)
+    """
+    ocr_service = get_ocr_service()
+    extractor = get_field_extractor()
+
+    if file_type == 'pdf':
+        raw_text, confidence = ocr_service.process_pdf(file_data)
+    else:
+        raw_text, confidence = ocr_service.process_image(file_data)
+
+    ocr_fields = extractor.extract_fields(raw_text)
+    return raw_text, confidence, ocr_fields
+
+
+def _run_llm_vision(file_data: bytes, file_type: str) -> Dict[str, Any]:
+    """Run LLM vision parsing in a separate thread.
+
+    Args:
+        file_data: Raw file bytes
+        file_type: File type (pdf, jpg, png, etc.)
+
+    Returns:
+        Dictionary of extracted fields
+    """
+    llm_service = get_llm_service()
+
+    if not llm_service.is_available or not llm_service.supports_vision():
+        return {}
+
+    # Determine MIME type
+    mime_map = {
+        'pdf': 'application/pdf',
+        'jpg': 'image/jpeg',
+        'jpeg': 'image/jpeg',
+        'png': 'image/png',
+    }
+    mime_type = mime_map.get(file_type, 'image/png')
+
+    # For PDF, we need to convert first page to image
+    if file_type == 'pdf':
+        try:
+            from pdf2image import convert_from_bytes
+            from io import BytesIO
+
+            # Use higher DPI (300) for better text recognition in PDFs
+            # Some PDFs have text rendered as graphics which need higher resolution
+            images = convert_from_bytes(file_data, dpi=300, first_page=1, last_page=1)
+            if images:
+                # Convert PIL Image to bytes with high quality
+                buffer = BytesIO()
+                images[0].save(buffer, format='PNG', optimize=False)
+                file_data = buffer.getvalue()
+                mime_type = 'image/png'
+                logger.info(f"PDF converted to image: {images[0].size[0]}x{images[0].size[1]} pixels, {len(file_data)} bytes")
+            else:
+                logger.warning("Failed to convert PDF to image for LLM vision")
+                return {}
+        except Exception as e:
+            logger.error(f"PDF to image conversion failed: {e}")
+            return {}
+
+    return llm_service.parse_invoice_from_image(file_data, mime_type)
+
+
 async def process_invoice(invoice_id: int, db: AsyncSession) -> bool:
-    """Process an invoice: run OCR, optionally LLM, and compare results.
+    """Process an invoice: run OCR and LLM vision in parallel, then compare results.
+
+    This function runs OCR and LLM vision parsing in parallel for better performance
+    and more accurate results. The LLM analyzes the image directly instead of
+    relying on OCR text.
 
     Args:
         invoice_id: ID of the invoice to process
@@ -49,17 +134,34 @@ async def process_invoice(invoice_id: int, db: AsyncSession) -> bool:
             logger.error(f"Invoice {invoice_id} not found")
             return False
 
-        # Run OCR
-        ocr_service = get_ocr_service()
-        extractor = get_field_extractor()
+        # Delete existing OCR, LLM, and diff results for reprocessing
+        await db.execute(delete(ParsingDiff).where(ParsingDiff.invoice_id == invoice_id))
+        await db.execute(delete(LlmResult).where(LlmResult.invoice_id == invoice_id))
+        await db.execute(delete(OcrResult).where(OcrResult.invoice_id == invoice_id))
+        logger.info(f"Cleared existing processing results for invoice {invoice_id}")
 
-        if invoice.file_type == 'pdf':
-            raw_text, confidence = ocr_service.process_pdf(invoice.file_data)
-        else:
-            raw_text, confidence = ocr_service.process_image(invoice.file_data)
+        # Run OCR and LLM vision in PARALLEL using separate thread pools
+        loop = asyncio.get_running_loop()
 
-        # Extract fields from OCR
-        ocr_fields = extractor.extract_fields(raw_text)
+        # Create tasks for parallel execution
+        # OCR uses CPU-bound pool, LLM uses I/O-bound pool
+        ocr_task = loop.run_in_executor(
+            _ocr_executor, _run_ocr, invoice.file_data, invoice.file_type
+        )
+        llm_task = loop.run_in_executor(
+            _llm_executor, _run_llm_vision, invoice.file_data, invoice.file_type
+        )
+
+        # Wait for both tasks to complete
+        logger.info(f"Running OCR and LLM vision in parallel for invoice {invoice_id}")
+        ocr_result_data, llm_fields = await asyncio.gather(ocr_task, llm_task)
+
+        # Unpack OCR results
+        raw_text, confidence, ocr_fields = ocr_result_data
+        has_llm = bool(llm_fields)
+
+        logger.info(f"OCR completed: {len(ocr_fields)} fields extracted")
+        logger.info(f"LLM vision completed: {len(llm_fields)} fields extracted (has_llm={has_llm})")
 
         # Save OCR result
         ocr_result = OcrResult(
@@ -79,35 +181,25 @@ async def process_invoice(invoice_id: int, db: AsyncSession) -> bool:
         )
         db.add(ocr_result)
 
-        # Run LLM parsing if available
-        llm_service = get_llm_service()
-        llm_fields = {}
-        has_llm = False
-
-        if llm_service.is_available:
-            logger.info(f"Running LLM parsing for invoice {invoice_id}")
-            llm_fields = llm_service.parse_invoice(raw_text)
-            has_llm = bool(llm_fields)
-
-            if has_llm:
-                # Save LLM result
-                llm_result = LlmResult(
-                    invoice_id=invoice_id,
-                    invoice_number=llm_fields.get('invoice_number'),
-                    issue_date=llm_fields.get('issue_date'),
-                    buyer_name=llm_fields.get('buyer_name'),
-                    buyer_tax_id=llm_fields.get('buyer_tax_id'),
-                    seller_name=llm_fields.get('seller_name'),
-                    seller_tax_id=llm_fields.get('seller_tax_id'),
-                    item_name=llm_fields.get('item_name'),
-                    total_with_tax=llm_fields.get('total_with_tax'),
-                    amount=llm_fields.get('amount'),
-                    tax_amount=llm_fields.get('tax_amount'),
-                    tax_rate=llm_fields.get('tax_rate'),
-                )
-                db.add(llm_result)
+        # Save LLM result if available
+        if has_llm:
+            llm_result = LlmResult(
+                invoice_id=invoice_id,
+                invoice_number=llm_fields.get('invoice_number'),
+                issue_date=llm_fields.get('issue_date'),
+                buyer_name=llm_fields.get('buyer_name'),
+                buyer_tax_id=llm_fields.get('buyer_tax_id'),
+                seller_name=llm_fields.get('seller_name'),
+                seller_tax_id=llm_fields.get('seller_tax_id'),
+                item_name=llm_fields.get('item_name'),
+                total_with_tax=llm_fields.get('total_with_tax'),
+                amount=llm_fields.get('amount'),
+                tax_amount=llm_fields.get('tax_amount'),
+                tax_rate=llm_fields.get('tax_rate'),
+            )
+            db.add(llm_result)
         else:
-            logger.info(f"LLM service not available, using OCR results only")
+            logger.warning(f"LLM vision not available - invoice {invoice_id} cannot be auto-confirmed")
 
         # Compare OCR and LLM results, create diffs
         final_fields, diffs = _compare_and_resolve(ocr_fields, llm_fields, has_llm)
@@ -129,6 +221,7 @@ async def process_invoice(invoice_id: int, db: AsyncSession) -> bool:
         _update_invoice_from_fields(invoice, final_fields)
 
         # Set status based on whether review is needed
+        # LLM comparison is MANDATORY for confirmation
         # Check for conflicts in diffs
         has_conflicts = any(d['needs_review'] for d in diffs)
 
@@ -136,9 +229,14 @@ async def process_invoice(invoice_id: int, db: AsyncSession) -> bool:
         critical_fields = ['invoice_number', 'issue_date', 'total_with_tax', 'buyer_name', 'seller_name']
         missing_critical = any(not final_fields.get(f) for f in critical_fields)
 
-        needs_review = has_conflicts or missing_critical
+        # LLM is mandatory - if no LLM result, always require review
+        needs_llm_comparison = not has_llm
+
+        needs_review = has_conflicts or missing_critical or needs_llm_comparison
         if needs_review:
             invoice.status = InvoiceStatus.REVIEWING
+            if needs_llm_comparison:
+                logger.warning(f"Invoice {invoice_id} requires LLM comparison before confirmation")
         else:
             invoice.status = InvoiceStatus.CONFIRMED
 
@@ -180,8 +278,8 @@ def _compare_and_resolve(
             final_value = ocr_value
             source = 'ocr'
             needs_review = False
-        elif ocr_value == llm_value:
-            # Values match, no conflict
+        elif _values_are_equal(field_name, ocr_value, llm_value):
+            # Values match (including numeric equivalence like 330.00 == 330)
             final_value = ocr_value or llm_value
             source = 'matched'
             needs_review = False
@@ -225,6 +323,47 @@ def _normalize_value(value: Any) -> Optional[str]:
     if not value_str:
         return None
     return value_str
+
+
+# Fields that should be compared as numbers
+NUMERIC_FIELDS = ['total_with_tax', 'amount', 'tax_amount']
+
+
+def _values_are_equal(field_name: str, value1: Optional[str], value2: Optional[str]) -> bool:
+    """Compare two values, using numeric comparison for numeric fields.
+
+    Args:
+        field_name: Name of the field being compared
+        value1: First value (normalized string)
+        value2: Second value (normalized string)
+
+    Returns:
+        True if values are considered equal
+    """
+    # If both are None or empty, they're equal
+    if not value1 and not value2:
+        return True
+
+    # If only one is None/empty, they're not equal
+    if not value1 or not value2:
+        return False
+
+    # For numeric fields, compare as numbers
+    if field_name in NUMERIC_FIELDS:
+        try:
+            from decimal import Decimal, InvalidOperation
+            # Remove any currency symbols and whitespace
+            clean1 = value1.replace('¥', '').replace('￥', '').replace(',', '').strip()
+            clean2 = value2.replace('¥', '').replace('￥', '').replace(',', '').strip()
+            num1 = Decimal(clean1)
+            num2 = Decimal(clean2)
+            return num1 == num2
+        except (InvalidOperation, ValueError):
+            # Fall back to string comparison if not valid numbers
+            pass
+
+    # Default to string comparison
+    return value1 == value2
 
 
 def _update_invoice_from_fields(invoice: Invoice, fields: dict) -> None:

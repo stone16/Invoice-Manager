@@ -113,3 +113,40 @@ export interface UploadResponse {
   status: string;
   message: string;
 }
+
+// LLM Configuration Types
+export interface LLMProviderInfo {
+  name: string;
+  display_name: string;
+  is_configured: boolean;
+  model: string | null;
+}
+
+export interface LLMStatusResponse {
+  is_configured: boolean;
+  active_provider: string | null;
+  active_provider_display: string | null;
+  configured_providers: string[];
+  available_providers: LLMProviderInfo[];
+}
+
+export interface LLMConfigRequest {
+  provider: string;
+  api_key: string;
+  model?: string;
+  base_url?: string;
+}
+
+export interface LLMConfigResponse {
+  success: boolean;
+  message: string;
+  provider: string | null;
+}
+
+export interface LLMTestResponse {
+  success: boolean;
+  provider: string;
+  provider_display: string;
+  message: string;
+  response: string;
+}

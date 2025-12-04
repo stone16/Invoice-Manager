@@ -11,6 +11,8 @@ AGENTS.md
 .env.local
 .env.*.local
 *.env
+# Do not ignore example env file
+!.env.example
 
 # Python
 __pycache__/
