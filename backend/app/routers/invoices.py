@@ -357,6 +357,74 @@ async def batch_delete_invoices(
     }
 
 
+@router.post("/batch-reprocess")
+async def batch_reprocess_invoices(
+    background_tasks: BackgroundTasks,
+    request: BatchDeleteRequest,  # Reuse for invoice_ids
+    db: AsyncSession = Depends(get_db)
+):
+    """批量重新解析发票（清除旧的OCR/LLM结果，重新处理）"""
+    import logging
+    logger = logging.getLogger(__name__)
+
+    if not request.invoice_ids:
+        raise HTTPException(status_code=400, detail="请选择要重新解析的发票")
+
+    # Query invoices to reprocess
+    query = select(Invoice).where(Invoice.id.in_(request.invoice_ids))
+    result = await db.execute(query)
+    invoices = result.scalars().all()
+
+    if not invoices:
+        raise HTTPException(status_code=404, detail="未找到要重新解析的发票")
+
+    # Clear old parsing results and reset invoice fields
+    for invoice in invoices:
+        # Delete old OCR results
+        ocr_query = select(OcrResult).where(OcrResult.invoice_id == invoice.id)
+        ocr_result = await db.execute(ocr_query)
+        for ocr in ocr_result.scalars().all():
+            await db.delete(ocr)
+
+        # Delete old LLM results
+        llm_query = select(LlmResult).where(LlmResult.invoice_id == invoice.id)
+        llm_result = await db.execute(llm_query)
+        for llm in llm_result.scalars().all():
+            await db.delete(llm)
+
+        # Delete old parsing diffs
+        diff_query = select(ParsingDiff).where(ParsingDiff.invoice_id == invoice.id)
+        diff_result = await db.execute(diff_query)
+        for diff in diff_result.scalars().all():
+            await db.delete(diff)
+
+        # Reset invoice fields
+        invoice.invoice_number = None
+        invoice.issue_date = None
+        invoice.buyer_name = None
+        invoice.buyer_tax_id = None
+        invoice.seller_name = None
+        invoice.seller_tax_id = None
+        invoice.item_name = None
+        invoice.total_with_tax = None
+        invoice.amount = None
+        invoice.tax_amount = None
+        invoice.tax_rate = None
+        invoice.status = InvoiceStatus.UPLOADED
+
+    await db.commit()
+    logger.info(f"Cleared old parsing results for {len(invoices)} invoices, scheduling reprocess")
+
+    # Schedule background processing
+    for invoice in invoices:
+        background_tasks.add_task(process_invoice_background, invoice.id)
+
+    return {
+        "message": f"已清除 {len(invoices)} 张发票的旧解析结果，正在重新解析",
+        "count": len(invoices)
+    }
+
+
 @router.post("/{invoice_id}/process")
 async def process_invoice(
     invoice_id: int,
