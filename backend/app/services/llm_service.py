@@ -20,6 +20,29 @@ logger = logging.getLogger(__name__)
 settings = get_settings()
 
 
+def _model_matches_vision_pattern(model_name: str, vision_patterns: list[str]) -> bool:
+    """Check if a model name matches any vision pattern.
+
+    Uses exact match or prefix match with separator to avoid false positives.
+    For example, "gpt-4o" matches "gpt-4o" and "gpt-4o-mini" but not "gpt-4o-audio".
+
+    Args:
+        model_name: The configured model name
+        vision_patterns: List of known vision model patterns
+
+    Returns:
+        True if the model supports vision
+    """
+    for pattern in vision_patterns:
+        # Exact match
+        if model_name == pattern:
+            return True
+        # Prefix match: pattern must be followed by a separator (-) or end
+        if model_name.startswith(pattern + "-") or model_name.startswith(pattern + "."):
+            return True
+    return False
+
+
 class BaseLLMProvider(ABC):
     """Base class for LLM providers."""
 
@@ -86,7 +109,7 @@ class OpenAIProvider(BaseLLMProvider):
         return "openai"
 
     def supports_vision(self) -> bool:
-        return any(vm in settings.openai_model for vm in self.VISION_MODELS)
+        return _model_matches_vision_pattern(settings.openai_model, self.VISION_MODELS)
 
     def chat_completion(self, system_prompt: str, user_prompt: str) -> str:
         response = self.client.chat.completions.create(
@@ -149,7 +172,7 @@ class AnthropicProvider(BaseLLMProvider):
         return "anthropic"
 
     def supports_vision(self) -> bool:
-        return any(vm in settings.anthropic_model for vm in self.VISION_MODELS)
+        return _model_matches_vision_pattern(settings.anthropic_model, self.VISION_MODELS)
 
     def chat_completion(self, system_prompt: str, user_prompt: str) -> str:
         response = self.client.messages.create(
@@ -224,7 +247,7 @@ class GoogleProvider(BaseLLMProvider):
         return "google"
 
     def supports_vision(self) -> bool:
-        return any(vm in settings.google_model for vm in self.VISION_MODELS)
+        return _model_matches_vision_pattern(settings.google_model, self.VISION_MODELS)
 
     def chat_completion(self, system_prompt: str, user_prompt: str) -> str:
         # Gemini combines system and user prompts
@@ -275,7 +298,7 @@ class QwenProvider(BaseLLMProvider):
         return "qwen"
 
     def supports_vision(self) -> bool:
-        return any(vm in settings.qwen_model for vm in self.VISION_MODELS)
+        return _model_matches_vision_pattern(settings.qwen_model, self.VISION_MODELS)
 
     def chat_completion(self, system_prompt: str, user_prompt: str) -> str:
         response = self.client.chat.completions.create(
@@ -376,7 +399,7 @@ class ZhipuProvider(BaseLLMProvider):
         return "zhipu"
 
     def supports_vision(self) -> bool:
-        return any(vm in settings.zhipu_model for vm in self.VISION_MODELS)
+        return _model_matches_vision_pattern(settings.zhipu_model, self.VISION_MODELS)
 
     def chat_completion(self, system_prompt: str, user_prompt: str) -> str:
         response = self.client.chat.completions.create(

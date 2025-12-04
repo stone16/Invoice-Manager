@@ -1,9 +1,12 @@
 """Settings and configuration API endpoints."""
 
+import logging
 import os
 from typing import Optional, List
 from pydantic import BaseModel
 from fastapi import APIRouter, HTTPException
+
+logger = logging.getLogger(__name__)
 
 from app.config import get_settings, clear_settings_cache
 from app.services.llm_service import get_llm_service, reset_llm_service, PROVIDERS
@@ -170,7 +173,8 @@ async def configure_llm(request: LLMConfigRequest):
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"配置失败: {str(e)}")
+        logger.error(f"LLM configuration failed: {e}")
+        raise HTTPException(status_code=500, detail="配置失败，请检查配置参数是否正确") from e
 
 
 @router.post("/llm/test")
@@ -201,10 +205,11 @@ async def test_llm_connection():
         }
 
     except Exception as e:
+        logger.error(f"LLM connection test failed: {e}")
         raise HTTPException(
             status_code=500,
-            detail=f"LLM连接测试失败: {str(e)}"
-        )
+            detail="LLM连接测试失败，请检查API密钥和网络连接"
+        ) from e
 
 
 def _get_provider_model(provider_name: str) -> Optional[str]:
