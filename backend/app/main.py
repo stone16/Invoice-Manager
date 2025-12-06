@@ -63,4 +63,12 @@ async def startup():
 
 @app.get("/")
 async def root():
+    """
+    Provide basic API metadata for the root endpoint.
+    
+    Returns:
+        dict: A dictionary with keys:
+            - "message": a Chinese string identifying the API ("发票管理系统 API").
+            - "version": the API version string (e.g., "1.0.0").
+    """
     return {"message": "发票管理系统 API", "version": "1.0.0"}

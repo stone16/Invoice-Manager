@@ -22,20 +22,18 @@ async def log_audit(
     details: Optional[str] = None,
 ) -> AuditLog:
     """
-    Create and persist a new audit log entry for a specific entity and action.
-    
-    Constructs an AuditLog from the provided fields, adds it to the given database session, and commits the transaction.
+    Create and persist an audit log entry for a specific entity and action.
     
     Parameters:
-        db (AsyncSession): Database session used to persist the record.
-        entity_type (str): Type of the entity (e.g., "invoice", "parsing_diff").
+        db (AsyncSession): Database session used to persist the audit record.
+        entity_type (str): Logical type of the entity (e.g., "invoice", "parsing_diff").
         entity_id (int): Identifier of the entity.
         action (str): Action performed on the entity (e.g., "create", "update", "delete", "resolve").
-        old_value (Optional[Dict[str, Any]]): Previous state of the entity, if applicable.
-        new_value (Optional[Dict[str, Any]]): New state of the entity, if applicable.
+        old_value (Optional[Dict[str, Any]]): Previous state of the entity, if available.
+        new_value (Optional[Dict[str, Any]]): New state of the entity, if available.
         user_id (Optional[str]): Identifier of the user who performed the action.
         ip_address (Optional[str]): Client IP address associated with the action.
-        user_agent (Optional[str]): Client user agent string associated with the action.
+        user_agent (Optional[str]): Client User-Agent string associated with the action.
         details (Optional[str]): Optional human-readable description or metadata.
     
     Returns:
@@ -73,21 +71,22 @@ async def log_audit_no_commit(
     details: Optional[str] = None,
 ) -> AuditLog:
     """
-    Create an AuditLog instance and add it to the provided session without committing the transaction.
+    Create an AuditLog entry and add it to the provided session without committing the transaction.
     
     Parameters:
+        db (AsyncSession): Database session to which the AuditLog will be added.
         entity_type (str): Type or category of the audited entity.
         entity_id (int): Identifier of the audited entity.
         action (str): Action performed on the entity.
-        old_value (Optional[Dict[str, Any]]): State of the entity before the action.
-        new_value (Optional[Dict[str, Any]]): State of the entity after the action.
+        old_value (Optional[Dict[str, Any]]): Entity state before the action.
+        new_value (Optional[Dict[str, Any]]): Entity state after the action.
         user_id (Optional[str]): Identifier of the user who performed the action.
         ip_address (Optional[str]): Client IP address associated with the action.
         user_agent (Optional[str]): Client user-agent string.
         details (Optional[str]): Additional contextual information about the audit event.
     
     Returns:
-        AuditLog: The created AuditLog instance (added to the session but not committed).
+        AuditLog: The created AuditLog instance added to the session but not committed.
     """
     audit_log = AuditLog(
         entity_type=entity_type,
