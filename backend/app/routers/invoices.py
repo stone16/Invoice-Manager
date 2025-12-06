@@ -6,8 +6,6 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from decimal import Decimal
-from slowapi import Limiter
-from slowapi.util import get_remote_address
 
 from app.database import get_db
 from app.models.invoice import Invoice, OcrResult, LlmResult, ParsingDiff, InvoiceStatus
@@ -18,12 +16,10 @@ from app.schemas.invoice import (
 )
 from app.config import get_settings
 from app.services.audit_service import log_audit_no_commit, get_client_info
+from app.rate_limit import limiter
 
 settings = get_settings()
 router = APIRouter()
-
-# Rate limiter for this router
-limiter = Limiter(key_func=get_remote_address)
 
 
 @router.post("/upload", response_model=List[UploadResponse])
@@ -107,10 +103,13 @@ async def process_invoice_background(invoice_id: int, max_retries: int = 3):
     """Background task to process an invoice with OCR/LLM.
 
     Implements exponential backoff retry logic for transient failures.
+    Total attempts = 1 (initial) + max_retries, with delays of 2, 4, 8 seconds
+    between retries.
 
     Args:
         invoice_id: ID of the invoice to process
-        max_retries: Maximum number of retry attempts (default: 3)
+        max_retries: Maximum number of retries after the initial attempt (default: 3,
+            resulting in up to 4 total attempts)
     """
     from app.services.invoice_service import process_invoice as do_process
     from app.database import async_session_maker
