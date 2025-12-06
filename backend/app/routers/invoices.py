@@ -34,7 +34,20 @@ async def upload_invoices(
     files: List[UploadFile] = File(...),
     db: AsyncSession = Depends(get_db)
 ):
-    """上传发票文件 (支持多文件)，上传后异步触发OCR解析"""
+    """
+    Handle uploading multiple invoice files, validate them, persist uploaded invoices, log audits, and enqueue background processing.
+    
+    Validates file extensions and size for each provided UploadFile; for valid files creates an Invoice record with status UPLOADED, records an audit entry, commits the transaction, and schedules background processing tasks. Invalid files produce per-file error results instead of creating invoice records.
+    
+    Parameters:
+        request (Request): Incoming HTTP request used to extract client info for auditing.
+        background_tasks (BackgroundTasks): FastAPI background task manager used to schedule invoice processing.
+        files (List[UploadFile]): Files to upload; each file is validated and processed individually.
+        db (AsyncSession): Database session used to create Invoice records and persist audit entries.
+    
+    Returns:
+        List[UploadResponse]: Per-file upload results containing the invoice id (0 for failures), file name, status ("success" or "error"), and a message.
+    """
     results = []
     invoice_ids_to_process = []
     client_info = get_client_info(request)
@@ -104,13 +117,14 @@ async def upload_invoices(
 
 
 async def process_invoice_background(invoice_id: int, max_retries: int = 3):
-    """Background task to process an invoice with OCR/LLM.
-
-    Implements exponential backoff retry logic for transient failures.
-
-    Args:
-        invoice_id: ID of the invoice to process
-        max_retries: Maximum number of retry attempts (default: 3)
+    """
+    Process an invoice in background using OCR and LLM with exponential backoff retries.
+    
+    On success logs a processing-complete audit entry; if all retries are exhausted the invoice status is reset to `UPLOADED` and a process-failed audit entry is logged.
+    
+    Parameters:
+        invoice_id (int): ID of the invoice to process.
+        max_retries (int): Maximum number of retry attempts before marking the processing as failed (default: 3).
     """
     from app.services.invoice_service import process_invoice as do_process
     from app.database import async_session_maker
@@ -376,7 +390,21 @@ async def update_invoice(
     request: Request,
     db: AsyncSession = Depends(get_db)
 ):
-    """更新发票信息"""
+    """
+    Update fields of an existing invoice and record an audit entry.
+    
+    Applies only the fields present in `update_data` to the invoice, records an audit entry containing serialized old and new values (converting Enums, dates, and Decimals), commits the transaction, refreshes the invoice, and returns the updated representation.
+    
+    Parameters:
+        invoice_id (int): ID of the invoice to update.
+        update_data (InvoiceUpdate): Partial update data; only provided fields are applied.
+    
+    Raises:
+        HTTPException: 404 if the invoice does not exist.
+    
+    Returns:
+        InvoiceResponse: The updated invoice object.
+    """
     query = select(Invoice).where(Invoice.id == invoice_id)
     result = await db.execute(query)
     invoice = result.scalar_one_or_none()
@@ -434,7 +462,19 @@ async def batch_update_invoices(
     batch_request: BatchUpdateRequest,
     db: AsyncSession = Depends(get_db)
 ):
-    """批量更新发票状态/归属人"""
+    """
+    Update status and/or owner for multiple invoices identified by IDs.
+    
+    Applies the provided `status` and/or `owner` from `batch_request` to each invoice whose ID is listed in `batch_request.invoice_ids`. Records an audit entry for each modified invoice and commits the changes.
+    
+    Parameters:
+        batch_request (BatchUpdateRequest): Contains `invoice_ids` (list of invoice IDs to update) and optional `status` and `owner` values to apply.
+    
+    Returns:
+        dict: A summary with keys:
+            - "message": A human-readable success message.
+            - "updated_count": The number of invoices that were updated.
+    """
     query = select(Invoice).where(Invoice.id.in_(batch_request.invoice_ids))
     result = await db.execute(query)
     invoices = result.scalars().all()
@@ -481,7 +521,23 @@ async def batch_delete_invoices(
     batch_request: BatchDeleteRequest,
     db: AsyncSession = Depends(get_db)
 ):
-    """批量删除发票及其关联数据"""
+    """
+    Delete multiple invoices specified in the request and record an audit entry for each deletion.
+    
+    Deletes all Invoice records whose IDs are provided in batch_request.invoice_ids, logs per-invoice deletion audits using client IP and user-agent from request, commits the transaction, and returns a summary of the operation.
+    
+    Parameters:
+        request (Request): HTTP request used to extract client IP and user-agent for audit entries.
+        batch_request (BatchDeleteRequest): Request body containing `invoice_ids`, the list of invoice IDs to delete.
+        db (AsyncSession): Database session (dependency-injected).
+    
+    Returns:
+        dict: A summary containing a human-readable message and `deleted_count` (int) of deleted invoices.
+    
+    Raises:
+        HTTPException: 400 if `invoice_ids` is empty or not provided.
+        HTTPException: 404 if no invoices matching the provided IDs are found.
+    """
     if not batch_request.invoice_ids:
         raise HTTPException(status_code=400, detail="请选择要删除的发票")
 
@@ -525,7 +581,20 @@ async def batch_reprocess_invoices(
     batch_request: BatchDeleteRequest,  # Reuse for invoice_ids
     db: AsyncSession = Depends(get_db)
 ):
-    """批量重新解析发票（清除旧的OCR/LLM结果，重新处理）"""
+    """
+    Reset OCR/LLM results and requeue processing for the specified invoices.
+    
+    Clears existing OcrResult, LlmResult, and ParsingDiff records for the invoices in batch_request.invoice_ids, resets invoice fields (identifiers, parties, item and amount fields) to None and status to UPLOADED, commits the changes, and schedules background reprocessing tasks for each invoice.
+    
+    Parameters:
+        batch_request (BatchDeleteRequest): Request object containing `invoice_ids` to reprocess.
+    
+    Returns:
+        dict: {"message": <status message>, "count": <number of invoices scheduled>}.
+    
+    Raises:
+        HTTPException: 400 if `invoice_ids` is empty; 404 if no matching invoices are found.
+    """
     import logging
     logger = logging.getLogger(__name__)
 
@@ -616,7 +685,15 @@ async def delete_invoice(
     request: Request,
     db: AsyncSession = Depends(get_db)
 ):
-    """删除发票"""
+    """
+    Delete an invoice by its ID, record an audit entry with client info, and commit the deletion.
+    
+    Raises:
+        HTTPException: 404 if the invoice with the given ID does not exist.
+    
+    Returns:
+        dict: A confirmation object with a `message` key indicating successful deletion.
+    """
     query = select(Invoice).where(Invoice.id == invoice_id)
     result = await db.execute(query)
     invoice = result.scalar_one_or_none()
@@ -650,7 +727,28 @@ async def resolve_diff(
     request: Request,
     db: AsyncSession = Depends(get_db)
 ):
-    """解决解析差异，选择OCR、LLM或自定义值"""
+    """
+    Resolve a parsing difference by choosing the OCR value, LLM value, or a provided custom value and apply it to the invoice.
+    
+    Parameters:
+        invoice_id (int): ID of the invoice that contains the parsing difference.
+        diff_id (int): ID of the parsing difference to resolve.
+        resolve_request (ResolveDiffRequest): Decision payload. `source` must be one of `'ocr'`, `'llm'`, or `'custom'`. When `source` is `'custom'`, `custom_value` provides the value to apply.
+        request (Request): Incoming HTTP request (used to collect client info for auditing).
+        db (AsyncSession): Database session dependency.
+    
+    Returns:
+        dict: {
+            "message": success message string,
+            "field_name": name of the invoice field that was updated,
+            "final_value": the value applied to the invoice (may be None),
+            "all_resolved": `true` if all parsing diffs for the invoice are resolved, `false` otherwise
+        }
+    
+    Raises:
+        HTTPException: 404 if the parsing diff or invoice is not found.
+        HTTPException: 400 if `resolve_request.source` is not one of `'ocr'`, `'llm'`, or `'custom'`.
+    """
     from datetime import datetime
     from decimal import Decimal as Dec
 
@@ -756,7 +854,19 @@ async def confirm_invoice(
     request: Request,
     db: AsyncSession = Depends(get_db)
 ):
-    """确认发票，标记所有差异为已解决。LLM比对是必须的。"""
+    """
+    Confirm an invoice by marking all parsing diffs as resolved.
+    
+    If any diff lacks a final value, this sets it to the existing final value or falls back to the OCR (or LLM) value, marks the diff resolved, and updates the invoice status to CONFIRMED. An audit entry is recorded (using client IP and user agent) before committing.
+    
+    Raises:
+        HTTPException: 404 if the invoice does not exist.
+        HTTPException: 400 if no LLM comparison result exists for the invoice.
+        HTTPException: 400 if no parsing diffs exist for the invoice.
+    
+    Returns:
+        dict: A response object containing a confirmation message and `resolved_count` (the number of diffs marked resolved).
+    """
     # Get invoice
     invoice_query = select(Invoice).where(Invoice.id == invoice_id)
     invoice_result = await db.execute(invoice_query)
@@ -828,7 +938,24 @@ async def export_invoices_csv(
     end_date: Optional[str] = Query(None, description="结束日期"),
     db: AsyncSession = Depends(get_db)
 ):
-    """导出发票为CSV格式"""
+    """
+    Export filtered invoices as a CSV file stream.
+    
+    Filters invoices by optional parameters and returns a CSV stream encoded with a UTF-8 BOM suitable for Excel.
+    
+    Parameters:
+        invoice_ids (str, optional): Comma-separated invoice IDs (e.g., "1,2,3"). Empty or None means no ID filter.
+        status (InvoiceStatus, optional): Invoice status to filter by.
+        owner (str, optional): Owner name to filter by.
+        start_date (str, optional): Inclusive start date for invoice.issue_date (ISO format string, e.g., "2025-01-01").
+        end_date (str, optional): Inclusive end date for invoice.issue_date (ISO format string, e.g., "2025-01-31").
+        request (Request): Incoming request context (used for request-scoped data/auditing).
+        db (AsyncSession): Database session (injected dependency).
+    
+    Returns:
+        StreamingResponse: A streaming response whose body is the CSV bytes (UTF-8 with BOM) and which sets a Content-Disposition
+        header to suggest the filename "发票导出.csv".
+    """
     import csv
     from urllib.parse import quote
 
@@ -909,7 +1036,19 @@ async def export_invoices_excel(
     end_date: Optional[str] = Query(None, description="结束日期"),
     db: AsyncSession = Depends(get_db)
 ):
-    """导出发票为Excel格式"""
+    """
+    Export invoices matching the provided filters to an Excel (.xlsx) workbook.
+    
+    Parameters:
+        invoice_ids (Optional[str]): Comma-separated invoice IDs (e.g., "1,2,3"); when omitted, invoices are not filtered by ID.
+        status (Optional[InvoiceStatus]): Invoice status to filter by.
+        owner (Optional[str]): Owner to filter by.
+        start_date (Optional[str]): Start issue date filter (inclusive), expected in "YYYY-MM-DD" format.
+        end_date (Optional[str]): End issue date filter (inclusive), expected in "YYYY-MM-DD" format.
+    
+    Returns:
+        StreamingResponse: An HTTP streaming response with an Excel (.xlsx) file containing the matching invoices. The response includes a Content-Disposition header and the filename "发票导出.xlsx".
+    """
     from urllib.parse import quote
 
     try:

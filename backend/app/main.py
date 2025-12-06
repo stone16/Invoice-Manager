@@ -25,6 +25,15 @@ app.state.limiter = limiter
 # Custom rate limit exceeded handler with Chinese message
 @app.exception_handler(RateLimitExceeded)
 async def rate_limit_handler(request: Request, exc: RateLimitExceeded):
+    """
+    Handle a RateLimitExceeded exception by returning a localized 429 JSON response.
+    
+    Parameters:
+        exc (RateLimitExceeded): The rate limit exception; its `detail` value is included in the response message.
+    
+    Returns:
+        JSONResponse: HTTP 429 response with content `{"detail": "请求过于频繁，请稍后再试。限制: <exc.detail>"}`.
+    """
     return JSONResponse(
         status_code=429,
         content={"detail": f"请求过于频繁，请稍后再试。限制: {exc.detail}"}

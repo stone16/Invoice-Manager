@@ -21,22 +21,25 @@ async def log_audit(
     user_agent: Optional[str] = None,
     details: Optional[str] = None,
 ) -> AuditLog:
-    """Log an audit event.
-
-    Args:
-        db: Database session
-        entity_type: Type of entity (e.g., 'invoice', 'parsing_diff')
-        entity_id: ID of the entity
-        action: Action performed (e.g., 'create', 'update', 'delete', 'resolve')
-        old_value: Previous state (dict, optional)
-        new_value: New state (dict, optional)
-        user_id: ID of the user who performed the action (optional)
-        ip_address: IP address of the request (optional)
-        user_agent: User agent of the request (optional)
-        details: Human-readable description (optional)
-
+    """
+    Create and persist a new audit log entry for a specific entity and action.
+    
+    Constructs an AuditLog from the provided fields, adds it to the given database session, and commits the transaction.
+    
+    Parameters:
+        db (AsyncSession): Database session used to persist the record.
+        entity_type (str): Type of the entity (e.g., "invoice", "parsing_diff").
+        entity_id (int): Identifier of the entity.
+        action (str): Action performed on the entity (e.g., "create", "update", "delete", "resolve").
+        old_value (Optional[Dict[str, Any]]): Previous state of the entity, if applicable.
+        new_value (Optional[Dict[str, Any]]): New state of the entity, if applicable.
+        user_id (Optional[str]): Identifier of the user who performed the action.
+        ip_address (Optional[str]): Client IP address associated with the action.
+        user_agent (Optional[str]): Client user agent string associated with the action.
+        details (Optional[str]): Optional human-readable description or metadata.
+    
     Returns:
-        Created AuditLog record
+        AuditLog: The created and persisted AuditLog record.
     """
     audit_log = AuditLog(
         entity_type=entity_type,
@@ -69,9 +72,22 @@ async def log_audit_no_commit(
     user_agent: Optional[str] = None,
     details: Optional[str] = None,
 ) -> AuditLog:
-    """Log an audit event without committing (for use within transactions).
-
-    Same as log_audit but does not commit - caller is responsible for commit.
+    """
+    Create an AuditLog instance and add it to the provided session without committing the transaction.
+    
+    Parameters:
+        entity_type (str): Type or category of the audited entity.
+        entity_id (int): Identifier of the audited entity.
+        action (str): Action performed on the entity.
+        old_value (Optional[Dict[str, Any]]): State of the entity before the action.
+        new_value (Optional[Dict[str, Any]]): State of the entity after the action.
+        user_id (Optional[str]): Identifier of the user who performed the action.
+        ip_address (Optional[str]): Client IP address associated with the action.
+        user_agent (Optional[str]): Client user-agent string.
+        details (Optional[str]): Additional contextual information about the audit event.
+    
+    Returns:
+        AuditLog: The created AuditLog instance (added to the session but not committed).
     """
     audit_log = AuditLog(
         entity_type=entity_type,
@@ -91,13 +107,18 @@ async def log_audit_no_commit(
 
 
 def get_client_info(request) -> Dict[str, Optional[str]]:
-    """Extract client information from a FastAPI request.
-
-    Args:
-        request: FastAPI Request object
-
+    """
+    Extract client IP address and User-Agent from a FastAPI request.
+    
+    Prefers proxy headers (X-Forwarded-For, then X-Real-IP) for the IP address and falls back to request.client.host if headers are unavailable. Returns the User-Agent header truncated to 500 characters when present.
+    
+    Parameters:
+        request: FastAPI Request object to read headers and client info from.
+    
     Returns:
-        Dict with ip_address and user_agent
+        dict: A dictionary with keys:
+            - 'ip_address' (str | None): The client's IP address determined from headers or request.client.host, or None if unavailable.
+            - 'user_agent' (str | None): The User-Agent header value truncated to 500 characters, or None if unavailable.
     """
     # Get IP address (handle proxies)
     ip_address = None
