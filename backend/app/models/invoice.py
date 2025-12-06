@@ -9,6 +9,9 @@ from sqlalchemy.orm import relationship
 
 from app.database import Base
 
+# Import AuditLog to ensure it's registered with Base.metadata
+from app.models.audit_log import AuditLog  # noqa: F401
+
 
 class InvoiceStatus(str, Enum):
     UPLOADED = "已上传"      # File uploaded, waiting for OCR processing

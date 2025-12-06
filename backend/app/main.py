@@ -1,8 +1,11 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from slowapi.errors import RateLimitExceeded
 
 from app.config import get_settings
 from app.routers import health, invoices, settings as settings_router
+from app.rate_limit import limiter
 
 settings = get_settings()
 
@@ -11,6 +14,17 @@ app = FastAPI(
     description="Invoice Manager API - 发票上传、解析、管理系统",
     version="1.0.0",
 )
+
+# Add rate limiter to app state
+app.state.limiter = limiter
+
+# Custom rate limit exceeded handler with Chinese message
+@app.exception_handler(RateLimitExceeded)
+async def rate_limit_handler(request: Request, exc: RateLimitExceeded):
+    return JSONResponse(
+        status_code=429,
+        content={"detail": f"请求过于频繁，请稍后再试。限制: {exc.detail}"}
+    )
 
 # CORS configuration
 app.add_middleware(

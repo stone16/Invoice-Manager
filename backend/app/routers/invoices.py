@@ -1,7 +1,7 @@
 from typing import Optional, List
 from io import BytesIO
 from datetime import date
-from fastapi import APIRouter, Depends, UploadFile, File, HTTPException, Query, BackgroundTasks
+from fastapi import APIRouter, Depends, UploadFile, File, HTTPException, Query, BackgroundTasks, Request
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
@@ -15,13 +15,17 @@ from app.schemas.invoice import (
     ResolveDiffRequest
 )
 from app.config import get_settings
+from app.services.audit_service import log_audit_no_commit, get_client_info
+from app.rate_limit import limiter
 
 settings = get_settings()
 router = APIRouter()
 
 
 @router.post("/upload", response_model=List[UploadResponse])
+@limiter.limit("10/minute")
 async def upload_invoices(
+    request: Request,
     background_tasks: BackgroundTasks,
     files: List[UploadFile] = File(...),
     db: AsyncSession = Depends(get_db)
@@ -29,6 +33,7 @@ async def upload_invoices(
     """上传发票文件 (支持多文件)，上传后异步触发OCR解析"""
     results = []
     invoice_ids_to_process = []
+    client_info = get_client_info(request)
 
     for file in files:
         # Validate file type
@@ -67,6 +72,17 @@ async def upload_invoices(
 
         invoice_ids_to_process.append(invoice.id)
 
+        # Audit log for upload
+        await log_audit_no_commit(
+            db=db,
+            entity_type="invoice",
+            entity_id=invoice.id,
+            action="upload",
+            new_value={"file_name": invoice.file_name, "file_type": ext, "file_size": len(content)},
+            ip_address=client_info.get("ip_address"),
+            user_agent=client_info.get("user_agent"),
+        )
+
         results.append(UploadResponse(
             id=invoice.id,
             file_name=invoice.file_name,
@@ -83,32 +99,98 @@ async def upload_invoices(
     return results
 
 
-async def process_invoice_background(invoice_id: int):
-    """Background task to process an invoice with OCR/LLM."""
+async def process_invoice_background(invoice_id: int, max_retries: int = 3):
+    """Background task to process an invoice with OCR/LLM.
+
+    Implements exponential backoff retry logic for transient failures.
+    Total attempts = 1 (initial) + max_retries, with delays of 2, 4, 8 seconds
+    between retries.
+
+    Args:
+        invoice_id: ID of the invoice to process
+        max_retries: Maximum number of retries after the initial attempt (default: 3,
+            resulting in up to 4 total attempts)
+    """
     from app.services.invoice_service import process_invoice as do_process
     from app.database import async_session_maker
+    from app.services.audit_service import log_audit
     import logging
+    import asyncio
     logger = logging.getLogger(__name__)
 
+    retry_count = 0
+    last_error = None
+
+    while retry_count <= max_retries:
+        async with async_session_maker() as db:
+            try:
+                # Update status to PROCESSING
+                query = select(Invoice).where(Invoice.id == invoice_id)
+                result = await db.execute(query)
+                invoice = result.scalar_one_or_none()
+
+                if not invoice:
+                    logger.error(f"Invoice {invoice_id} not found")
+                    return
+
+                invoice.status = InvoiceStatus.PROCESSING
+                await db.commit()
+
+                logger.info(f"Background processing invoice {invoice_id} (attempt {retry_count + 1}/{max_retries + 1})")
+                success = await do_process(invoice_id, db)
+
+                if success:
+                    logger.info(f"Invoice {invoice_id} processing completed successfully")
+                    # Log successful processing
+                    await log_audit(
+                        db=db,
+                        entity_type="invoice",
+                        entity_id=invoice_id,
+                        action="process_complete",
+                        new_value={"status": "success", "attempts": retry_count + 1}
+                    )
+                    return
+                else:
+                    last_error = "Processing returned false"
+                    logger.warning(f"Invoice {invoice_id} processing returned false")
+
+            except Exception as e:
+                last_error = str(e)
+                logger.error(f"Failed to process invoice {invoice_id} (attempt {retry_count + 1}): {e}")
+                await db.rollback()
+
+        retry_count += 1
+
+        if retry_count <= max_retries:
+            # Exponential backoff: 2^retry_count seconds (2, 4, 8 seconds)
+            delay = 2 ** retry_count
+            logger.info(f"Retrying invoice {invoice_id} in {delay} seconds...")
+            await asyncio.sleep(delay)
+
+    # All retries exhausted - mark as failed
     async with async_session_maker() as db:
         try:
-            # Update status to PROCESSING
             query = select(Invoice).where(Invoice.id == invoice_id)
             result = await db.execute(query)
             invoice = result.scalar_one_or_none()
 
             if invoice:
-                invoice.status = InvoiceStatus.PROCESSING
+                # Set status back to UPLOADED so user can retry manually
+                invoice.status = InvoiceStatus.UPLOADED
                 await db.commit()
 
-                logger.info(f"Background processing invoice {invoice_id}")
-                success = await do_process(invoice_id, db)
-                if success:
-                    logger.info(f"Invoice {invoice_id} OCR completed successfully")
-                else:
-                    logger.warning(f"Invoice {invoice_id} OCR processing returned false")
+                # Log failed processing
+                await log_audit(
+                    db=db,
+                    entity_type="invoice",
+                    entity_id=invoice_id,
+                    action="process_failed",
+                    new_value={"error": last_error, "attempts": max_retries + 1}
+                )
+
+            logger.error(f"Invoice {invoice_id} processing failed after {max_retries + 1} attempts: {last_error}")
         except Exception as e:
-            logger.error(f"Failed to process invoice {invoice_id}: {e}")
+            logger.error(f"Failed to update invoice {invoice_id} status after retry exhaustion: {e}")
 
 
 @router.get("", response_model=InvoiceListResponse)
@@ -290,6 +372,7 @@ async def get_invoice_file(
 async def update_invoice(
     invoice_id: int,
     update_data: InvoiceUpdate,
+    request: Request,
     db: AsyncSession = Depends(get_db)
 ):
     """更新发票信息"""
@@ -300,9 +383,42 @@ async def update_invoice(
     if not invoice:
         raise HTTPException(status_code=404, detail="发票不存在")
 
+    # Capture old values for audit
     update_dict = update_data.model_dump(exclude_unset=True)
+    old_values = {key: getattr(invoice, key) for key in update_dict.keys()}
+    # Convert non-serializable types
+    for key, value in old_values.items():
+        if hasattr(value, 'value'):  # Enum
+            old_values[key] = value.value
+        elif hasattr(value, 'isoformat'):  # Date/DateTime
+            old_values[key] = value.isoformat()
+        elif isinstance(value, Decimal):
+            old_values[key] = str(value)
+
     for key, value in update_dict.items():
         setattr(invoice, key, value)
+
+    # Audit log
+    client_info = get_client_info(request)
+    new_values = update_dict.copy()
+    for key, value in new_values.items():
+        if hasattr(value, 'value'):  # Enum
+            new_values[key] = value.value
+        elif hasattr(value, 'isoformat'):  # Date/DateTime
+            new_values[key] = value.isoformat()
+        elif isinstance(value, Decimal):
+            new_values[key] = str(value)
+
+    await log_audit_no_commit(
+        db=db,
+        entity_type="invoice",
+        entity_id=invoice_id,
+        action="update",
+        old_value=old_values,
+        new_value=new_values,
+        ip_address=client_info.get("ip_address"),
+        user_agent=client_info.get("user_agent"),
+    )
 
     await db.commit()
     await db.refresh(invoice)
@@ -311,22 +427,43 @@ async def update_invoice(
 
 
 @router.post("/batch-update")
+@limiter.limit("30/minute")
 async def batch_update_invoices(
-    request: BatchUpdateRequest,
+    request: Request,
+    batch_request: BatchUpdateRequest,
     db: AsyncSession = Depends(get_db)
 ):
     """批量更新发票状态/归属人"""
-    query = select(Invoice).where(Invoice.id.in_(request.invoice_ids))
+    query = select(Invoice).where(Invoice.id.in_(batch_request.invoice_ids))
     result = await db.execute(query)
     invoices = result.scalars().all()
 
+    client_info = get_client_info(request)
     updated_count = 0
     for invoice in invoices:
-        if request.status is not None:
-            invoice.status = request.status
-        if request.owner is not None:
-            invoice.owner = request.owner
+        old_values = {}
+        new_values = {}
+        if batch_request.status is not None:
+            old_values["status"] = invoice.status.value if invoice.status else None
+            invoice.status = batch_request.status
+            new_values["status"] = batch_request.status.value
+        if batch_request.owner is not None:
+            old_values["owner"] = invoice.owner
+            invoice.owner = batch_request.owner
+            new_values["owner"] = batch_request.owner
         updated_count += 1
+
+        # Audit log for each invoice
+        await log_audit_no_commit(
+            db=db,
+            entity_type="invoice",
+            entity_id=invoice.id,
+            action="batch_update",
+            old_value=old_values,
+            new_value=new_values,
+            ip_address=client_info.get("ip_address"),
+            user_agent=client_info.get("user_agent"),
+        )
 
     await db.commit()
 
@@ -337,24 +474,37 @@ async def batch_update_invoices(
 
 
 @router.post("/batch-delete")
+@limiter.limit("20/minute")
 async def batch_delete_invoices(
-    request: BatchDeleteRequest,
+    request: Request,
+    batch_request: BatchDeleteRequest,
     db: AsyncSession = Depends(get_db)
 ):
     """批量删除发票及其关联数据"""
-    if not request.invoice_ids:
+    if not batch_request.invoice_ids:
         raise HTTPException(status_code=400, detail="请选择要删除的发票")
 
     # Query invoices to delete
-    query = select(Invoice).where(Invoice.id.in_(request.invoice_ids))
+    query = select(Invoice).where(Invoice.id.in_(batch_request.invoice_ids))
     result = await db.execute(query)
     invoices = result.scalars().all()
 
     if not invoices:
         raise HTTPException(status_code=404, detail="未找到要删除的发票")
 
+    client_info = get_client_info(request)
     deleted_count = 0
     for invoice in invoices:
+        # Audit log for each deletion
+        await log_audit_no_commit(
+            db=db,
+            entity_type="invoice",
+            entity_id=invoice.id,
+            action="delete",
+            old_value={"file_name": invoice.file_name, "invoice_number": invoice.invoice_number},
+            ip_address=client_info.get("ip_address"),
+            user_agent=client_info.get("user_agent"),
+        )
         await db.delete(invoice)
         deleted_count += 1
 
@@ -367,20 +517,22 @@ async def batch_delete_invoices(
 
 
 @router.post("/batch-reprocess")
+@limiter.limit("5/minute")
 async def batch_reprocess_invoices(
+    request: Request,
     background_tasks: BackgroundTasks,
-    request: BatchDeleteRequest,  # Reuse for invoice_ids
+    batch_request: BatchDeleteRequest,  # Reuse for invoice_ids
     db: AsyncSession = Depends(get_db)
 ):
     """批量重新解析发票（清除旧的OCR/LLM结果，重新处理）"""
     import logging
     logger = logging.getLogger(__name__)
 
-    if not request.invoice_ids:
+    if not batch_request.invoice_ids:
         raise HTTPException(status_code=400, detail="请选择要重新解析的发票")
 
     # Query invoices to reprocess
-    query = select(Invoice).where(Invoice.id.in_(request.invoice_ids))
+    query = select(Invoice).where(Invoice.id.in_(batch_request.invoice_ids))
     result = await db.execute(query)
     invoices = result.scalars().all()
 
@@ -460,6 +612,7 @@ async def process_invoice(
 @router.delete("/{invoice_id}")
 async def delete_invoice(
     invoice_id: int,
+    request: Request,
     db: AsyncSession = Depends(get_db)
 ):
     """删除发票"""
@@ -469,6 +622,18 @@ async def delete_invoice(
 
     if not invoice:
         raise HTTPException(status_code=404, detail="发票不存在")
+
+    # Audit log
+    client_info = get_client_info(request)
+    await log_audit_no_commit(
+        db=db,
+        entity_type="invoice",
+        entity_id=invoice_id,
+        action="delete",
+        old_value={"file_name": invoice.file_name, "invoice_number": invoice.invoice_number},
+        ip_address=client_info.get("ip_address"),
+        user_agent=client_info.get("user_agent"),
+    )
 
     await db.delete(invoice)
     await db.commit()
@@ -480,7 +645,8 @@ async def delete_invoice(
 async def resolve_diff(
     invoice_id: int,
     diff_id: int,
-    request: ResolveDiffRequest,
+    resolve_request: ResolveDiffRequest,
+    request: Request,
     db: AsyncSession = Depends(get_db)
 ):
     """解决解析差异，选择OCR、LLM或自定义值"""
@@ -498,19 +664,27 @@ async def resolve_diff(
     if not diff:
         raise HTTPException(status_code=404, detail="差异记录不存在")
 
+    # Capture old value for audit
+    old_diff_value = {
+        "field_name": diff.field_name,
+        "final_value": diff.final_value,
+        "source": diff.source,
+        "resolved": diff.resolved,
+    }
+
     # Determine the final value
-    if request.source == 'ocr':
+    if resolve_request.source == 'ocr':
         final_value = diff.ocr_value
-    elif request.source == 'llm':
+    elif resolve_request.source == 'llm':
         final_value = diff.llm_value
-    elif request.source == 'custom':
-        final_value = request.custom_value
+    elif resolve_request.source == 'custom':
+        final_value = resolve_request.custom_value
     else:
         raise HTTPException(status_code=400, detail="无效的来源类型")
 
     # Update the diff
     diff.final_value = final_value
-    diff.source = request.source
+    diff.source = resolve_request.source
     diff.resolved = 1
 
     # Get the invoice and update the corresponding field
@@ -546,6 +720,25 @@ async def resolve_diff(
     if all_resolved:
         invoice.status = InvoiceStatus.CONFIRMED
 
+    # Audit log for diff resolution
+    client_info = get_client_info(request)
+    await log_audit_no_commit(
+        db=db,
+        entity_type="parsing_diff",
+        entity_id=diff_id,
+        action="resolve",
+        old_value=old_diff_value,
+        new_value={
+            "field_name": field_name,
+            "final_value": final_value,
+            "source": resolve_request.source,
+            "resolved": 1,
+            "invoice_id": invoice_id,
+        },
+        ip_address=client_info.get("ip_address"),
+        user_agent=client_info.get("user_agent"),
+    )
+
     await db.commit()
 
     return {
@@ -559,6 +752,7 @@ async def resolve_diff(
 @router.post("/{invoice_id}/confirm")
 async def confirm_invoice(
     invoice_id: int,
+    request: Request,
     db: AsyncSession = Depends(get_db)
 ):
     """确认发票，标记所有差异为已解决。LLM比对是必须的。"""
@@ -601,7 +795,21 @@ async def confirm_invoice(
             diff.resolved = 1
 
     # Update invoice status
+    old_status = invoice.status.value if invoice.status else None
     invoice.status = InvoiceStatus.CONFIRMED
+
+    # Audit log for confirmation
+    client_info = get_client_info(request)
+    await log_audit_no_commit(
+        db=db,
+        entity_type="invoice",
+        entity_id=invoice_id,
+        action="confirm",
+        old_value={"status": old_status},
+        new_value={"status": InvoiceStatus.CONFIRMED.value, "resolved_diffs": len(diffs)},
+        ip_address=client_info.get("ip_address"),
+        user_agent=client_info.get("user_agent"),
+    )
 
     await db.commit()
 
@@ -609,7 +817,9 @@ async def confirm_invoice(
 
 
 @router.get("/export/csv")
+@limiter.limit("10/minute")
 async def export_invoices_csv(
+    request: Request,
     invoice_ids: Optional[str] = Query(None, description="发票ID列表，逗号分隔"),
     status: Optional[InvoiceStatus] = Query(None, description="状态筛选"),
     owner: Optional[str] = Query(None, description="归属人筛选"),
@@ -688,7 +898,9 @@ async def export_invoices_csv(
 
 
 @router.get("/export/excel")
+@limiter.limit("10/minute")
 async def export_invoices_excel(
+    request: Request,
     invoice_ids: Optional[str] = Query(None, description="发票ID列表，逗号分隔"),
     status: Optional[InvoiceStatus] = Query(None, description="状态筛选"),
     owner: Optional[str] = Query(None, description="归属人筛选"),

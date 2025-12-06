@@ -28,6 +28,9 @@ pdf2image==1.17.0
 pdfplumber==0.10.3
 openpyxl==3.1.2
 
+# Rate limiting
+slowapi==0.1.9
+
 # Testing
 pytest==7.4.4
 pytest-asyncio==0.23.3
