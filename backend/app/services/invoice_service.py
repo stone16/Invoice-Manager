@@ -38,6 +38,12 @@ COMPARABLE_FIELDS = [
 ]
 
 
+def _reset_extracted_fields(invoice: Invoice) -> None:
+    """Reset extracted fields to avoid stale values on reprocess."""
+    for field_name in COMPARABLE_FIELDS:
+        setattr(invoice, field_name, None)
+
+
 def _run_ocr(file_data: bytes, file_type: str) -> Tuple[str, float, Dict[str, Any]]:
     """Run OCR processing in a separate thread.
 
@@ -203,6 +209,9 @@ async def process_invoice(invoice_id: int, db: AsyncSession) -> bool:
 
         # Compare OCR and LLM results, create diffs
         final_fields, diffs = _compare_and_resolve(ocr_fields, llm_fields, has_llm)
+
+        # Clear extracted fields so missing values don't keep stale data
+        _reset_extracted_fields(invoice)
 
         # Save parsing diffs
         for diff in diffs:

@@ -22,6 +22,32 @@ settings = get_settings()
 router = APIRouter()
 
 
+def _parse_invoice_ids(invoice_ids: Optional[str]) -> Optional[List[int]]:
+    if not invoice_ids:
+        return None
+    ids: List[int] = []
+    for raw_id in invoice_ids.split(","):
+        raw_id = raw_id.strip()
+        if not raw_id:
+            continue
+        try:
+            ids.append(int(raw_id))
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail="发票ID必须为整数") from exc
+    if not ids:
+        raise HTTPException(status_code=400, detail="发票ID不能为空")
+    return ids
+
+
+def _parse_date_param(value: Optional[str], field_name: str) -> Optional[date]:
+    if not value:
+        return None
+    try:
+        return date.fromisoformat(value)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=f"{field_name} 日期格式无效，应为 YYYY-MM-DD") from exc
+
+
 @router.post("/upload", response_model=List[UploadResponse])
 @limiter.limit("10/minute")
 async def upload_invoices(
@@ -253,8 +279,8 @@ async def get_statistics(
     """获取发票统计数据"""
     query = select(Invoice)
 
-    if invoice_ids:
-        ids = [int(id.strip()) for id in invoice_ids.split(",") if id.strip()]
+    ids = _parse_invoice_ids(invoice_ids)
+    if ids:
         query = query.where(Invoice.id.in_(ids))
     if status:
         query = query.where(Invoice.status == status)
@@ -833,17 +859,19 @@ async def export_invoices_csv(
 
     query = select(Invoice)
 
-    if invoice_ids:
-        ids = [int(id.strip()) for id in invoice_ids.split(",") if id.strip()]
+    ids = _parse_invoice_ids(invoice_ids)
+    if ids:
         query = query.where(Invoice.id.in_(ids))
     if status:
         query = query.where(Invoice.status == status)
     if owner:
         query = query.where(Invoice.owner == owner)
-    if start_date:
-        query = query.where(Invoice.issue_date >= start_date)
-    if end_date:
-        query = query.where(Invoice.issue_date <= end_date)
+    start_date_obj = _parse_date_param(start_date, "start_date")
+    if start_date_obj:
+        query = query.where(Invoice.issue_date >= start_date_obj)
+    end_date_obj = _parse_date_param(end_date, "end_date")
+    if end_date_obj:
+        query = query.where(Invoice.issue_date <= end_date_obj)
 
     query = query.order_by(Invoice.created_at.desc())
     result = await db.execute(query)
@@ -919,17 +947,19 @@ async def export_invoices_excel(
 
     query = select(Invoice)
 
-    if invoice_ids:
-        ids = [int(id.strip()) for id in invoice_ids.split(",") if id.strip()]
+    ids = _parse_invoice_ids(invoice_ids)
+    if ids:
         query = query.where(Invoice.id.in_(ids))
     if status:
         query = query.where(Invoice.status == status)
     if owner:
         query = query.where(Invoice.owner == owner)
-    if start_date:
-        query = query.where(Invoice.issue_date >= start_date)
-    if end_date:
-        query = query.where(Invoice.issue_date <= end_date)
+    start_date_obj = _parse_date_param(start_date, "start_date")
+    if start_date_obj:
+        query = query.where(Invoice.issue_date >= start_date_obj)
+    end_date_obj = _parse_date_param(end_date, "end_date")
+    if end_date_obj:
+        query = query.where(Invoice.issue_date <= end_date_obj)
 
     query = query.order_by(Invoice.created_at.desc())
     result = await db.execute(query)
