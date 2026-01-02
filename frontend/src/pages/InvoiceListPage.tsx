@@ -385,7 +385,7 @@ function InvoiceListPage() {
         key: 'total_with_tax',
         width: columnWidths.total_with_tax,
         align: 'right',
-        render: (val) => (val ? `¥${Number(val).toFixed(2)}` : '-'),
+        render: (val) => (val != null ? `¥${Number(val).toFixed(2)}` : '-'),
         onHeaderCell: () => ({
           width: columnWidths.total_with_tax,
           onResize: handleColumnResize('total_with_tax'),

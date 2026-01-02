@@ -397,22 +397,22 @@ function InvoiceDetailPage() {
                   {invoice.unit || '-'}
                 </Descriptions.Item>
                 <Descriptions.Item label="数量">
-                  {invoice.quantity || '-'}
+                  {invoice.quantity != null ? invoice.quantity : '-'}
                 </Descriptions.Item>
                 <Descriptions.Item label="单价">
-                  {invoice.unit_price || '-'}
+                  {invoice.unit_price != null ? invoice.unit_price : '-'}
                 </Descriptions.Item>
                 <Descriptions.Item label="金额">
-                  {invoice.amount ? `¥${Number(invoice.amount).toFixed(2)}` : '-'}
+                  {invoice.amount != null ? `¥${Number(invoice.amount).toFixed(2)}` : '-'}
                 </Descriptions.Item>
                 <Descriptions.Item label="税率">
                   {invoice.tax_rate || '-'}
                 </Descriptions.Item>
                 <Descriptions.Item label="税额">
-                  {invoice.tax_amount ? `¥${Number(invoice.tax_amount).toFixed(2)}` : '-'}
+                  {invoice.tax_amount != null ? `¥${Number(invoice.tax_amount).toFixed(2)}` : '-'}
                 </Descriptions.Item>
                 <Descriptions.Item label="价税合计">
-                  {invoice.total_with_tax ? `¥${Number(invoice.total_with_tax).toFixed(2)}` : '-'}
+                  {invoice.total_with_tax != null ? `¥${Number(invoice.total_with_tax).toFixed(2)}` : '-'}
                 </Descriptions.Item>
                 <Descriptions.Item label="状态">
                   <Tag color={statusColors[invoice.status] || 'default'}>
