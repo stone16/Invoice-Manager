@@ -7,16 +7,14 @@ import openpyxl
 from openpyxl.utils import get_column_letter
 
 from app.models.digi_flow import FileContentType
+from app.services.content_normalizer.block_id import (
+    build_excel_block_id,
+    build_merged_cell_block_id,
+)
 from app.services.content_normalizer.models import BoundingBox, FileContentMetadata, Sheet, SheetContent
 
 
 class ExcelExtractor:
-    def _cell_id(self, doc_index: int, sheet_index: int, cell_ref: str) -> str:
-        return f"{doc_index}.{sheet_index}.{cell_ref}"
-
-    def _merged_id(self, doc_index: int, sheet_index: int, cell_range: str) -> str:
-        return f"{doc_index}.{sheet_index}.{cell_range}"
-
     def extract(
         self,
         file_bytes: bytes,
@@ -43,7 +41,12 @@ class ExcelExtractor:
                 if value is None or str(value).strip() == "":
                     continue
                 bbox = BoundingBox(
-                    id=self._merged_id(doc_index, sheet_index, str(merged_range)),
+                    id=build_merged_cell_block_id(
+                        doc_index,
+                        sheet_index,
+                        f"{get_column_letter(merged_range.min_col)}{merged_range.min_row}",
+                        f"{get_column_letter(merged_range.max_col)}{merged_range.max_row}",
+                    ),
                     raw_value=str(value),
                     top_left_x=float(merged_range.min_col),
                     top_left_y=float(merged_range.min_row),
@@ -60,7 +63,7 @@ class ExcelExtractor:
                     if value is None or str(value).strip() == "":
                         continue
                     bbox = BoundingBox(
-                        id=self._cell_id(doc_index, sheet_index, cell.coordinate),
+                        id=build_excel_block_id(doc_index, sheet_index, cell.coordinate),
                         raw_value=str(value),
                         top_left_x=float(cell.column),
                         top_left_y=float(cell.row),
