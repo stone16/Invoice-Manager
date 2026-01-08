@@ -179,6 +179,9 @@ class TestConfigServiceUnit:
             captured_config = obj
 
         mock_db.add = capture_add
+        mock_result = MagicMock()
+        mock_result.scalars.return_value.first.return_value = None
+        mock_db.execute = AsyncMock(return_value=mock_result)
 
         await create_config(
             db=mock_db,

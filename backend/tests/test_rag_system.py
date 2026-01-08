@@ -114,6 +114,9 @@ class TestPgvectorIntegration:
         from app.services.rag.vector_repository import VectorRepository
 
         mock_db = AsyncMock()
+        mock_db.add = MagicMock()
+        mock_db.flush = AsyncMock()
+        mock_db.refresh = AsyncMock()
         repo = VectorRepository(mock_db)
 
         vector_data = {
