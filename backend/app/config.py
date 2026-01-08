@@ -38,6 +38,12 @@ class Settings(BaseSettings):
     zhipu_api_key: str = ""
     zhipu_model: str = "glm-4-flash"
 
+    # LangSmith
+    langsmith_api_key: str = ""
+    langsmith_project: str = "invoice-manager"
+    langsmith_endpoint: str = ""
+    langsmith_tracing: bool = False
+
     # File upload
     max_file_size: int = 10 * 1024 * 1024  # 10MB
     allowed_extensions: list[str] = ["pdf", "jpg", "jpeg", "png"]

@@ -24,7 +24,7 @@ class FakeOcrEngine:
         return list(self._spans)
 
 
-@pytest.mark.parametrize("text", ["Invoice 123", "发票号码 123456"])
+@pytest.mark.parametrize("text", ["Invoice 123", "Total Amount 500"])
 def test_pdf_extractor_extracts_text_with_positions(text: str):
     import fitz
 

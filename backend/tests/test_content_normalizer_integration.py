@@ -9,6 +9,13 @@ import pytest
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.append(str(ROOT / "backend"))
 
+# Check if paddle is available (required for PaddleOCR)
+try:
+    import paddle
+    PADDLE_AVAILABLE = True
+except ImportError:
+    PADDLE_AVAILABLE = False
+
 from app.services.content_normalizer.normalizer import ContentNormalizer  # noqa: E402
 from app.services.content_normalizer.extractor.ocr_engine import OcrSpan  # noqa: E402
 from app.services.content_normalizer.block_id import is_valid_pdf_block_id, is_valid_excel_block_id  # noqa: E402
@@ -22,6 +29,7 @@ class FakeOcrEngine:
         return list(self._spans)
 
 
+@pytest.mark.skipif(not PADDLE_AVAILABLE, reason="paddle not installed")
 def test_content_normalizer_pdf_pipeline_assigns_block_ids():
     import fitz
 
@@ -45,6 +53,7 @@ def test_content_normalizer_pdf_pipeline_assigns_block_ids():
     assert all(is_valid_pdf_block_id(bbox.id) for bbox in page.bounding_boxes)
 
 
+@pytest.mark.skipif(not PADDLE_AVAILABLE, reason="paddle not installed")
 def test_content_normalizer_excel_pipeline_assigns_block_ids():
     import openpyxl
 
