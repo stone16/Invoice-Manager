@@ -1,12 +1,6 @@
 from __future__ import annotations
 
-from pathlib import Path
-import sys
-
 import pytest
-
-ROOT = Path(__file__).resolve().parents[2]
-sys.path.append(str(ROOT / "backend"))
 
 from app.services.schema_management.schema_parser import parse_yaml_schema  # noqa: E402
 from app.services.schema_management.schema_validator import validate_json_schema  # noqa: E402

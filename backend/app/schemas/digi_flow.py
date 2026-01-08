@@ -154,6 +154,9 @@ class ConfigUpdate(BaseModel):
     domain: Optional[str] = Field(None, max_length=64, description="Domain category")
     schema_id: Optional[int] = Field(None, description="Associated schema ID")
     schema_version: Optional[int] = Field(None, description="Associated schema version")
+    create_new_version: bool = Field(
+        True, description="Create a new config version"
+    )
     workflow_config: Optional[WorkflowConfigModel] = Field(
         None, description="Workflow configuration"
     )

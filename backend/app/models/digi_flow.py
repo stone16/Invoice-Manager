@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import IntEnum
 
 from sqlalchemy import (
@@ -23,7 +23,14 @@ except ImportError:  # pragma: no cover - dependency added in requirements
     Vector = None
 
 
+def _utc_now() -> datetime:
+    """Return timezone-aware UTC timestamp."""
+    return datetime.now(timezone.utc)
+
+
 class FileContentType(IntEnum):
+    """Supported file content types for digitization."""
+
     INVALID = 0
     PDF = 1
     EXCEL = 2
@@ -31,12 +38,16 @@ class FileContentType(IntEnum):
 
 
 class SourceContentType(IntEnum):
+    """Supported input sources for extraction."""
+
     INVALID = 0
     FILE = 1
     TEXT = 2
 
 
 class MainStatus(IntEnum):
+    """Primary workflow status for a digitization flow."""
+
     PENDING = 0
     IN_PROGRESS = 1
     COMPLETED = 2
@@ -44,6 +55,8 @@ class MainStatus(IntEnum):
 
 
 class DataServiceStatus(IntEnum):
+    """Status for downstream data services."""
+
     NONE = 0
     IN_PROGRESS = 1
     COMPLETED = 2
@@ -51,22 +64,30 @@ class DataServiceStatus(IntEnum):
 
 
 class DataOrigin(IntEnum):
+    """Origin of extracted data."""
+
     SYSTEM = 0
     USER = 1
 
 
 class ConfigStatus(IntEnum):
+    """Lifecycle status for configs and schemas."""
+
     ACTIVE = 1
     ARCHIVED = 2
 
 
 class FeedbackSource(IntEnum):
+    """Source of feedback for corrections."""
+
     UI = 1
     API = 2
     AUTO = 3
 
 
 class AuditReasonCode(IntEnum):
+    """Reason codes for audit logging."""
+
     INCORRECT = 1
     MISSING = 2
     EXTRA = 3
@@ -76,6 +97,8 @@ class AuditReasonCode(IntEnum):
 
 
 class DigiFlowSchema(Base):
+    """Versioned schema definitions for digitization outputs."""
+
     __tablename__ = "digi_flow_schema"
 
     id = Column(BigInteger, Identity(), nullable=False)
@@ -85,7 +108,7 @@ class DigiFlowSchema(Base):
     schema = Column(JSONB, nullable=False, default=dict)
     version = Column(Integer, nullable=False, default=1)
     status = Column(Integer, nullable=False, default=ConfigStatus.ACTIVE)
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=_utc_now, nullable=False)
     created_by = Column(JSONB, nullable=True)
     updated_at = Column(DateTime, nullable=True)
     updated_by = Column(JSONB, nullable=True)
@@ -98,9 +121,11 @@ class DigiFlowSchema(Base):
 
 
 class DigiFlowConfig(Base):
+    """Versioned configuration for digitization workflows."""
+
     __tablename__ = "digi_flow_config"
 
-    id = Column(BigInteger, Identity(), primary_key=True)
+    id = Column(BigInteger, Identity(), nullable=False)
     slug = Column(String(64), nullable=False)
     name = Column(String(128), nullable=False)
     description = Column(Text, nullable=True)
@@ -113,15 +138,21 @@ class DigiFlowConfig(Base):
     schema_validation = Column(JSONB, nullable=True)
     version = Column(Integer, nullable=False, default=1)
     status = Column(Integer, nullable=False, default=ConfigStatus.ACTIVE)
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=_utc_now, nullable=False)
     created_by = Column(JSONB, nullable=True)
     updated_at = Column(DateTime, nullable=True)
     updated_by = Column(JSONB, nullable=True)
     deleted_at = Column(DateTime, nullable=True)
     deleted_by = Column(JSONB, nullable=True)
 
+    __table_args__ = (
+        PrimaryKeyConstraint("id", "version"),
+    )
+
 
 class DigiFlow(Base):
+    """Digitization flow instance and status tracking."""
+
     __tablename__ = "digi_flow"
 
     id = Column(BigInteger, Identity(), primary_key=True)
@@ -141,13 +172,15 @@ class DigiFlow(Base):
     extra_attributes = Column(JSONB, nullable=True)
     metadata_json = Column("metadata", JSONB, nullable=True)
     is_sampled = Column(Boolean, nullable=True, default=False)
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=_utc_now, nullable=False)
     created_by = Column(JSONB, nullable=True)
     updated_at = Column(DateTime, nullable=True)
     updated_by = Column(JSONB, nullable=True)
 
 
 class DigiFlowResult(Base):
+    """Versioned extraction results for a digitization flow."""
+
     __tablename__ = "digi_flow_result"
 
     id = Column(BigInteger, Identity(), primary_key=True)
@@ -157,11 +190,13 @@ class DigiFlowResult(Base):
     text_blocks = Column(JSONB, nullable=True)
     data_origin = Column(Integer, nullable=False, default=DataOrigin.SYSTEM)
     version = Column(Integer, nullable=False, default=1)
-    updated_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=_utc_now, nullable=False)
     updated_by = Column(JSONB, nullable=True)
 
 
 class RagTrainingDataVector(Base):
+    """Stored embeddings for RAG training data."""
+
     __tablename__ = "rag_training_data_vector"
 
     id = Column(BigInteger, Identity(), primary_key=True)
@@ -176,11 +211,13 @@ class RagTrainingDataVector(Base):
     reference_input = Column(JSONB, nullable=False)
     reference_output = Column(JSONB, nullable=False)
     embedding = Column(Vector(1536) if Vector is not None else String, nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=_utc_now, nullable=False)
     created_by = Column(JSONB, nullable=True)
 
 
 class DigiFlowResultFieldAudit(Base):
+    """Field-level audit records for extraction corrections."""
+
     __tablename__ = "digi_flow_result_field_audit"
 
     id = Column(BigInteger, Identity(), primary_key=True)
@@ -192,5 +229,5 @@ class DigiFlowResultFieldAudit(Base):
     new_value = Column(JSONB, nullable=True)
     reason_code = Column(Integer, nullable=False)
     reason_text = Column(String, nullable=True)
-    audited_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    audited_at = Column(DateTime, default=_utc_now, nullable=False)
     audited_by = Column(JSONB, nullable=True)

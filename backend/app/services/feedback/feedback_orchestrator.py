@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from app.services.feedback.audit_service import AuditService
 from app.services.feedback.confirmation_service import ConfirmationService
@@ -59,6 +59,7 @@ class FeedbackOrchestrator:
         Returns:
             Workflow result with confirmation and training status.
         """
+        # NOTE: If strict consistency is required, call this within a DB transaction.
         # Step 1: Submit correction
         correction_result = await self.correction_service.submit_correction(
             flow_id=flow_id,
@@ -111,7 +112,7 @@ class FeedbackOrchestrator:
         self,
         flow_id: int,
         result_id: int,
-        corrections: list[Dict[str, Any]],
+        corrections: List[Dict[str, Any]],
         content: Dict[str, Any],
         config_id: int,
     ) -> Dict[str, Any]:
@@ -127,6 +128,7 @@ class FeedbackOrchestrator:
         Returns:
             Workflow result with confirmation and training status.
         """
+        # NOTE: If strict consistency is required, call this within a DB transaction.
         # Step 1: Submit bulk corrections (single version)
         correction_result = await self.correction_service.submit_bulk_corrections(
             flow_id=flow_id,

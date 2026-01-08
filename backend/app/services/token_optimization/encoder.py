@@ -1,27 +1,51 @@
-"""Tiktoken encoder utilities with caching."""
+"""Token encoder utilities with caching."""
 
 from __future__ import annotations
 
-from typing import List, Optional
+from typing import List, Optional, Protocol
 
-import tiktoken
+try:
+    import tiktoken
+except ImportError:  # pragma: no cover - optional dependency
+    tiktoken = None  # type: ignore
+
+class _EncoderProtocol(Protocol):
+    def encode(self, text: str) -> List[int]:
+        ...
+
+    def decode(self, tokens: List[int]) -> str:
+        ...
+
+
+class _FallbackEncoder:
+    """Simple character-based encoder used when tiktoken is unavailable."""
+
+    def encode(self, text: str) -> List[int]:
+        return [ord(ch) for ch in text]
+
+    def decode(self, tokens: List[int]) -> str:
+        return "".join(chr(token) for token in tokens)
+
 
 # Global encoder cache - initialize once, reuse everywhere
-_ENCODER_CACHE: Optional[tiktoken.Encoding] = None
+_ENCODER_CACHE: Optional[_EncoderProtocol] = None
 _ENCODER_MODEL = "cl100k_base"  # GPT-4, GPT-3.5-turbo compatible encoding
 
 
-def get_encoder() -> tiktoken.Encoding:
-    """Get cached tiktoken encoder.
+def get_encoder() -> _EncoderProtocol:
+    """Get cached encoder (tiktoken when available, fallback otherwise).
 
     Initialize once, reuse everywhere for performance.
 
     Returns:
-        Cached tiktoken encoder instance.
+        Cached encoder instance.
     """
     global _ENCODER_CACHE
     if _ENCODER_CACHE is None:
-        _ENCODER_CACHE = tiktoken.get_encoding(_ENCODER_MODEL)
+        if tiktoken is None:
+            _ENCODER_CACHE = _FallbackEncoder()
+        else:
+            _ENCODER_CACHE = tiktoken.get_encoding(_ENCODER_MODEL)
     return _ENCODER_CACHE
 
 

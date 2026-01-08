@@ -1,9 +1,3 @@
-from pathlib import Path
-import sys
-
-ROOT = Path(__file__).resolve().parents[2]
-sys.path.append(str(ROOT / "backend"))
-
 from app.database import Base  # noqa: E402
 from app.models import digi_flow  # noqa: F401,E402
 

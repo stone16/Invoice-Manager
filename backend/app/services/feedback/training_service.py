@@ -90,6 +90,7 @@ def _extract_output_block_ids(reference_output: Dict[str, Any]) -> Set[str]:
     block_ids = set()
 
     def _traverse(obj: Any) -> None:
+        """Traverse nested structures to collect block IDs."""
         if isinstance(obj, dict):
             if "data_source" in obj and "block_id" in obj["data_source"]:
                 block_ids.add(obj["data_source"]["block_id"])
@@ -228,6 +229,7 @@ class TrainingDataService:
         Args:
             flow_id: Flow ID reference.
         """
+        # TODO: Replace with real delete query.
         # In real implementation:
         # DELETE FROM digi_flow_training_data WHERE flow_id = :flow_id
         await self.db.execute(None)  # Mock deletion
@@ -274,6 +276,7 @@ class TrainingDataService:
         self, flow_id: int, config_id: int
     ) -> Optional[Any]:
         """Get existing training data for flow/config."""
+        # TODO: Replace with real query.
         result = await self.db.execute(None)  # Mock query
         return result.scalar()
 

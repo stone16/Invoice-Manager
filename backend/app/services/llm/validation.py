@@ -59,7 +59,7 @@ def extract_block_ids_from_result(
                 block_ids.add(bid)
 
         # Recurse into nested dicts
-        for key, value in result.items():
+        for _key, value in result.items():
             if isinstance(value, dict):
                 extract_block_ids_from_result(value, block_ids)
             elif isinstance(value, list):

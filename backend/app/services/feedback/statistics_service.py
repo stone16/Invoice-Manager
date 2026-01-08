@@ -28,7 +28,7 @@ class StatisticsService:
         Returns:
             Statistics including correction rate.
         """
-        # Query aggregate statistics
+        # TODO: Replace mock query with real aggregation query.
         result = await self.db.execute(None)  # Mock query
         stats = result.one()
 
@@ -60,6 +60,7 @@ class StatisticsService:
         Returns:
             List of problematic field statistics.
         """
+        # TODO: Replace mock query with real aggregation query.
         result = await self.db.execute(None)  # Mock query
         field_stats = result.scalars().all()
 
@@ -90,6 +91,7 @@ class StatisticsService:
         Returns:
             Daily statistics.
         """
+        # TODO: Implement query for daily statistics.
         # In real implementation:
         # SELECT DATE(created_at), COUNT(*), SUM(CASE WHEN ...)
         # FROM digi_flow WHERE config_id = :config_id
@@ -114,6 +116,7 @@ class StatisticsService:
         Returns:
             List of corrections for the field.
         """
+        # TODO: Implement query for field correction history.
         # In real implementation:
         # SELECT * FROM digi_flow_result_field_audit
         # WHERE config_id = :config_id AND field_path = :field_path
@@ -132,6 +135,7 @@ class StatisticsService:
         Returns:
             Distribution by confidence bucket.
         """
+        # TODO: Implement aggregation for confidence buckets.
         # Buckets: 0-0.5, 0.5-0.7, 0.7-0.9, 0.9-1.0
         return {
             "very_low": 0,    # < 0.5

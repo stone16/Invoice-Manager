@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import os
 from typing import Any, Dict, List, Optional
 
 from app.services.llm.prompt_engine import build_system_prompt, build_user_prompt
@@ -59,6 +58,7 @@ class DigitizationExecutor:
         prompt_config: Optional[Dict[str, Any]] = None,
         rag_config: Optional[Dict[str, Any]] = None,
         document_name: str = "document",
+        document_type: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Execute digitization on document content.
 
@@ -69,6 +69,7 @@ class DigitizationExecutor:
             prompt_config: Optional prompt configuration.
             rag_config: Optional RAG configuration.
             document_name: Name of the document.
+            document_type: Optional document type for block-id validation.
 
         Returns:
             Extraction result dictionary with status, data, and metadata.
@@ -111,6 +112,7 @@ class DigitizationExecutor:
             validation_errors = validate_extraction_result(
                 parsed_result,
                 available_block_ids,
+                document_type=self._resolve_document_type(content, document_type),
             )
 
             # Determine status
@@ -204,8 +206,8 @@ class DigitizationExecutor:
         # Try to convert to dict
         try:
             return parse_extraction_result(dict(response))
-        except Exception:
-            raise ValueError(f"Could not parse response: {type(response)}")
+        except Exception as e:
+            raise ValueError(f"Could not parse response: {type(response)}") from e
 
     def _extract_available_block_ids(
         self,
@@ -228,6 +230,40 @@ class DigitizationExecutor:
                 block_ids.add(block_id)
 
         return block_ids
+
+    def _resolve_document_type(
+        self,
+        content: Dict[str, Any],
+        override: Optional[str],
+    ) -> str:
+        """Resolve document type for block ID validation."""
+        if override:
+            return override
+
+        doc_type = content.get("document_type")
+        if isinstance(doc_type, str) and doc_type:
+            return doc_type
+
+        content_type = content.get("content_type") or content.get("file_type")
+        if isinstance(content_type, str):
+            lowered = content_type.lower()
+            if lowered in {"pdf", "excel", "image"}:
+                return "pdf" if lowered == "image" else lowered
+        if isinstance(content_type, int):
+            if content_type == 2:
+                return "excel"
+            if content_type in {1, 3}:
+                return "pdf"
+
+        file_name = content.get("file_name", "")
+        if isinstance(file_name, str) and "." in file_name:
+            ext = file_name.rsplit(".", 1)[-1].lower()
+            if ext in {"xlsx", "xls"}:
+                return "excel"
+            if ext in {"png", "jpg", "jpeg", "bmp", "tiff"}:
+                return "pdf"
+
+        return "pdf"
 
 
 class BatchDigitizationExecutor:

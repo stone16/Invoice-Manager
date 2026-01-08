@@ -21,6 +21,7 @@ DEFAULT_RAG_CONFIG: Dict[str, Any] = {
     "training_data_source_fields": ["plain_text", "text_blocks"],
     "training_data_reference_fields": ["output_values", "data_source_info"],
 }
+MAX_REFERENCE_INPUT_CHARS = 5000
 
 
 class RAGService:
@@ -81,7 +82,6 @@ class RAGService:
         rag_config: Optional[Dict[str, Any]] = None,
         schema: Optional[Dict[str, Any]] = None,
         config_zero_shot: Optional[str] = None,
-        text_blocks: Optional[List[Dict[str, Any]]] = None,
     ) -> Dict[str, Any]:
         """Get few-shot examples for a document using RAG.
 
@@ -94,8 +94,6 @@ class RAGService:
             rag_config: RAG configuration.
             schema: JSON schema for zero-shot fallback.
             config_zero_shot: Config-specific zero-shot example.
-            text_blocks: Text blocks from the document.
-
         Returns:
             Dict with 'few_shot_examples' and 'source' ('rag' or 'zero_shot').
         """
@@ -222,7 +220,7 @@ class RAGService:
         selected_blocks = select_partial_content(all_blocks, extraction_result)
 
         reference_input = {
-            "plain_text": content[:5000],  # Truncate for storage
+            "plain_text": content[:MAX_REFERENCE_INPUT_CHARS],  # Truncate for storage
             "text_blocks": selected_blocks,
         }
 

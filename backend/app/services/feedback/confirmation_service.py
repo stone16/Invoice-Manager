@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from datetime import datetime
 from typing import Any, Dict, Optional
 
 
@@ -72,17 +71,10 @@ class ConfirmationService:
         Returns:
             True if confirmation was successful.
         """
-        confirmation_record = {
-            "flow_id": flow_id,
-            "result_id": result_id,
-            "confirmed_by": confirmed_by,
-            "confirmed_at": datetime.utcnow().isoformat(),
-            "notes": notes,
-        }
-
         # In real implementation, save confirmation
         # UPDATE digi_flow_result SET confirmed_at = NOW() WHERE id = :result_id
         # INSERT INTO digi_flow_confirmation ...
+        # TODO: Persist confirmation record.
 
         return True
 

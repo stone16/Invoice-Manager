@@ -10,12 +10,16 @@ from app.services.content_normalizer.models import FileContentMetadata, PageCont
 
 
 class ContentNormalizer:
+    """Normalize different file types into a common content structure."""
+
     def __init__(self, ocr_engine: Optional[object] = None):
+        """Initialize normalizer with an optional OCR engine."""
         self._pdf_extractor = PDFExtractor(ocr_engine=ocr_engine)
         self._image_extractor = ImageExtractor(ocr_engine=ocr_engine)
         self._excel_extractor = ExcelExtractor()
 
     def _detect_type(self, file_name: str) -> FileContentType:
+        """Determine content type based on the file extension."""
         ext = file_name.split(".")[-1].lower()
         if ext == "pdf":
             return FileContentType.PDF
@@ -26,6 +30,7 @@ class ContentNormalizer:
         raise ValueError(f"Unsupported file type: {ext}")
 
     def _assign_pdf_block_ids(self, metadata: FileContentMetadata) -> FileContentMetadata:
+        """Assign PDF-style block IDs after clustering."""
         updated_pages = []
         for page in metadata.file_content.pages:
             clustered = cluster_into_coordinates(page.bounding_boxes)
@@ -40,7 +45,9 @@ class ContentNormalizer:
         file_name: str,
         file_object_fid: str,
         doc_index: int = 1,
+        languages: Optional[list[str]] = None,
     ) -> FileContentMetadata:
+        """Normalize file bytes into structured content metadata."""
         content_type = self._detect_type(file_name)
         if content_type == FileContentType.PDF:
             metadata = self._pdf_extractor.extract(
@@ -48,6 +55,7 @@ class ContentNormalizer:
                 doc_index=doc_index,
                 file_name=file_name,
                 file_object_fid=file_object_fid,
+                languages=languages,
             )
             return self._assign_pdf_block_ids(metadata)
         if content_type == FileContentType.IMAGE:
@@ -56,6 +64,7 @@ class ContentNormalizer:
                 doc_index=doc_index,
                 file_name=file_name,
                 file_object_fid=file_object_fid,
+                languages=languages,
             )
             return self._assign_pdf_block_ids(metadata)
         if content_type == FileContentType.EXCEL:
@@ -64,5 +73,6 @@ class ContentNormalizer:
                 doc_index=doc_index,
                 file_name=file_name,
                 file_object_fid=file_object_fid,
+                languages=languages,
             )
         raise ValueError(f"Unsupported content type: {content_type}")

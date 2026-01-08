@@ -12,6 +12,7 @@ _MIN_EPS = 1.0
 
 
 def calculate_adaptive_eps(y_coords: Sequence[float], heights: Sequence[float]) -> float:
+    """Compute adaptive epsilon for row clustering based on gaps and heights."""
     if not y_coords:
         return _MIN_EPS
     gaps = []
@@ -25,6 +26,7 @@ def calculate_adaptive_eps(y_coords: Sequence[float], heights: Sequence[float]) 
 
 
 def dbscan_1d(points: Sequence[float], eps: float, min_samples: int) -> List[int]:
+    """Cluster 1D points with a simple DBSCAN implementation."""
     n = len(points)
     if n == 0:
         return []
@@ -53,6 +55,7 @@ def dbscan_1d(points: Sequence[float], eps: float, min_samples: int) -> List[int
             continue
         labels[i] = cluster_id
         seeds = [neighbor for neighbor in neighbors if neighbor != i]
+        seeds_set = set(seeds)
         while seeds:
             current = seeds.pop()
             if not visited[current]:
@@ -60,8 +63,9 @@ def dbscan_1d(points: Sequence[float], eps: float, min_samples: int) -> List[int
                 current_neighbors = neighbors_cache.get(current, [])
                 if len(current_neighbors) >= min_samples:
                     for neighbor in current_neighbors:
-                        if neighbor not in seeds:
+                        if neighbor not in seeds_set:
                             seeds.append(neighbor)
+                            seeds_set.add(neighbor)
             if labels[current] == -1:
                 labels[current] = cluster_id
         cluster_id += 1
@@ -70,12 +74,13 @@ def dbscan_1d(points: Sequence[float], eps: float, min_samples: int) -> List[int
 
 
 def cluster_rows(bboxes: Sequence[BoundingBox], eps: float, min_samples: int = 1) -> List[List[BoundingBox]]:
+    """Cluster bounding boxes into rows using their y coordinates."""
     if not bboxes:
         return []
     y_coords = [bbox.top_left_y for bbox in bboxes]
     labels = dbscan_1d(y_coords, eps=eps, min_samples=min_samples)
     clusters: Dict[int, List[BoundingBox]] = {}
-    for bbox, label in zip(bboxes, labels):
+    for bbox, label in zip(bboxes, labels, strict=True):
         clusters.setdefault(label, []).append(bbox)
     sorted_clusters = sorted(
         clusters.values(),
@@ -85,10 +90,11 @@ def cluster_rows(bboxes: Sequence[BoundingBox], eps: float, min_samples: int = 1
 
 
 def _cluster_columns(row: Sequence[BoundingBox], eps: float) -> List[List[BoundingBox]]:
+    """Cluster a row of bounding boxes into columns by x coordinate."""
     x_coords = [bbox.top_left_x for bbox in row]
     labels = dbscan_1d(x_coords, eps=eps, min_samples=1)
     clusters: Dict[int, List[BoundingBox]] = {}
-    for bbox, label in zip(row, labels):
+    for bbox, label in zip(row, labels, strict=True):
         clusters.setdefault(label, []).append(bbox)
     return sorted(
         clusters.values(),
@@ -97,6 +103,7 @@ def _cluster_columns(row: Sequence[BoundingBox], eps: float) -> List[List[Boundi
 
 
 def identify_sections(rows: Sequence[Sequence[BoundingBox]]) -> List[List[List[BoundingBox]]]:
+    """Group rows into sections based on simple row signature heuristics."""
     sections: List[List[List[BoundingBox]]] = []
     current: List[List[BoundingBox]] = []
     last_signature: Tuple[int, ...] | None = None
@@ -119,6 +126,7 @@ def cluster_into_coordinates(
     bboxes: Sequence[BoundingBox],
     eps: float | None = None,
 ) -> List[BoundingBox]:
+    """Assign row/column indices to bounding boxes based on clustering."""
     if not bboxes:
         return []
 

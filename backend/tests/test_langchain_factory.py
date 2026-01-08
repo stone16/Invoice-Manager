@@ -1,13 +1,9 @@
 from __future__ import annotations
 
-from pathlib import Path
 import sys
 import types
 
 import pytest
-
-ROOT = Path(__file__).resolve().parents[2]
-sys.path.append(str(ROOT / "backend"))
 
 from app.services.langchain_client_factory import LangChainClientFactory  # noqa: E402
 

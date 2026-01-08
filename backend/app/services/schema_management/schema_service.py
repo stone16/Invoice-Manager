@@ -110,7 +110,7 @@ async def get_schema(
     else:
         query = query.order_by(DigiFlowSchema.version.desc())
     result = await db.execute(query)
-    return result.scalar_one_or_none()
+    return result.scalar_one_or_none() if version is not None else result.scalars().first()
 
 
 async def get_schema_by_slug(
@@ -134,7 +134,7 @@ async def get_schema_by_slug(
     else:
         query = query.order_by(DigiFlowSchema.version.desc())
     result = await db.execute(query)
-    return result.scalar_one_or_none()
+    return result.scalar_one_or_none() if version is not None else result.scalars().first()
 
 
 async def list_schemas(

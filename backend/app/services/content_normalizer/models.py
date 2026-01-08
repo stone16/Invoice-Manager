@@ -8,6 +8,8 @@ from app.models.digi_flow import FileContentType
 
 
 class BoundingBox(BaseModel):
+    """Bounding box with optional clustering metadata."""
+
     id: str = ""
     raw_value: str
     top_left_x: float
@@ -20,6 +22,8 @@ class BoundingBox(BaseModel):
 
 
 class Page(BaseModel):
+    """Page content with bounding boxes."""
+
     id: int
     width: int
     height: int
@@ -27,20 +31,28 @@ class Page(BaseModel):
 
 
 class PageContent(BaseModel):
+    """Collection of pages for a document."""
+
     pages: List[Page] = Field(default_factory=list)
 
 
 class Sheet(BaseModel):
+    """Excel sheet content with bounding boxes."""
+
     id: int
     name: str
     bounding_boxes: List[BoundingBox] = Field(default_factory=list)
 
 
 class SheetContent(BaseModel):
+    """Collection of sheets for a workbook."""
+
     sheets: List[Sheet] = Field(default_factory=list)
 
 
 class FileContentMetadata(BaseModel):
+    """Metadata and extracted content for an input file."""
+
     index: int
     file_object_fid: str
     file_name: str

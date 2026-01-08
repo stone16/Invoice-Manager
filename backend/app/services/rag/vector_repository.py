@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from typing import Any, Dict, List, Optional
 
 from sqlalchemy import select, text
@@ -95,7 +96,7 @@ class VectorRepository:
         # Using 1 - (embedding <=> query_embedding) for cosine similarity
         # <=> is the cosine distance operator in pgvector
 
-        embedding_str = f"[{','.join(str(x) for x in embedding)}]"
+        embedding_str = json.dumps(embedding)
 
         query = text(
             """

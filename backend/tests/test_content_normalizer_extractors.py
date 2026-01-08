@@ -1,13 +1,8 @@
 from __future__ import annotations
 
 from io import BytesIO
-from pathlib import Path
-import sys
 
 import pytest
-
-ROOT = Path(__file__).resolve().parents[2]
-sys.path.append(str(ROOT / "backend"))
 
 from app.services.content_normalizer.extractor.pdf_extractor import PDFExtractor  # noqa: E402
 from app.services.content_normalizer.extractor.image_extractor import ImageExtractor  # noqa: E402

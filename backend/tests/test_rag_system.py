@@ -2,16 +2,10 @@
 
 from __future__ import annotations
 
-import sys
-from pathlib import Path
 from typing import Any, Dict, List
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-
-ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(ROOT / "backend"))
-
 
 # ====================
 # 4.1 Embedding Generation Tests
@@ -95,10 +89,10 @@ Footer information"""
 
         texts = ["text 1", "text 2", "text 3"]
 
-        with patch("app.services.rag.embedding_service.get_openai_client") as mock_client:
+        with patch("app.services.rag.embedding_service.get_async_openai_client") as mock_client:
             mock_response = MagicMock()
             mock_response.data = [MagicMock(embedding=[0.1] * 1536) for _ in texts]
-            mock_client.return_value.embeddings.create.return_value = mock_response
+            mock_client.return_value.embeddings.create = AsyncMock(return_value=mock_response)
 
             embeddings = await generate_embeddings_batch(texts)
 

@@ -11,10 +11,14 @@ from app.services.content_normalizer.text_normalizer import normalize_text
 
 
 class PDFExtractor:
+    """Extractor for PDF documents with optional OCR on images."""
+
     def __init__(self, ocr_engine: Optional[PaddleOcrEngine] = None):
+        """Initialize PDF extractor with optional OCR engine."""
         self._ocr_engine = ocr_engine or PaddleOcrEngine()
 
     def _extract_text_bboxes(self, page: fitz.Page) -> List[BoundingBox]:
+        """Extract text bounding boxes from a PDF page."""
         bboxes: List[BoundingBox] = []
         text_dict = page.get_text("dict")
         for block in text_dict.get("blocks", []):
@@ -39,6 +43,7 @@ class PDFExtractor:
         return bboxes
 
     def _spans_to_boxes(self, spans: List[OcrSpan], x_offset: float, y_offset: float, scale_x: float, scale_y: float) -> List[BoundingBox]:
+        """Convert OCR spans to PDF-space bounding boxes."""
         boxes: List[BoundingBox] = []
         for span in spans:
             boxes.append(
@@ -54,6 +59,7 @@ class PDFExtractor:
         return boxes
 
     def _extract_image_bboxes(self, pdf: fitz.Document, page: fitz.Page) -> List[BoundingBox]:
+        """Extract OCR bounding boxes from images embedded in a PDF page."""
         if not self._ocr_engine:
             return []
         bboxes: List[BoundingBox] = []
@@ -77,17 +83,18 @@ class PDFExtractor:
         doc_index: int,
         file_name: str,
         file_object_fid: str,
+        languages: Optional[List[str]] = None,
     ) -> FileContentMetadata:
-        pdf = fitz.open(stream=file_bytes, filetype="pdf")
+        """Extract content metadata from a PDF file."""
         pages: List[Page] = []
-        for page_index, page in enumerate(pdf, start=1):
-            text_boxes = self._extract_text_bboxes(page)
-            image_boxes = self._extract_image_bboxes(pdf, page)
-            page_boxes = text_boxes + image_boxes
-            width, height = int(page.rect.width), int(page.rect.height)
-            pages.append(Page(id=page_index, width=width, height=height, bounding_boxes=page_boxes))
+        with fitz.open(stream=file_bytes, filetype="pdf") as pdf:
+            for page_index, page in enumerate(pdf, start=1):
+                text_boxes = self._extract_text_bboxes(page)
+                image_boxes = self._extract_image_bboxes(pdf, page)
+                page_boxes = text_boxes + image_boxes
+                width, height = int(page.rect.width), int(page.rect.height)
+                pages.append(Page(id=page_index, width=width, height=height, bounding_boxes=page_boxes))
 
-        pdf.close()
         content = PageContent(pages=pages)
         return FileContentMetadata(
             index=doc_index,
@@ -95,6 +102,6 @@ class PDFExtractor:
             file_name=file_name,
             file_bytes_size=len(file_bytes),
             content_type=FileContentType.PDF,
-            languages=["zh"],
+            languages=languages or ["zh"],
             file_content=content,
         )

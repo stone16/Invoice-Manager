@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from io import BytesIO
-from typing import List, Set
+from typing import List, Optional, Set
 
 import openpyxl
 from openpyxl.utils import get_column_letter
@@ -15,13 +15,17 @@ from app.services.content_normalizer.models import BoundingBox, FileContentMetad
 
 
 class ExcelExtractor:
+    """Extractor for Excel documents into bounding boxes."""
+
     def extract(
         self,
         file_bytes: bytes,
         doc_index: int,
         file_name: str,
         file_object_fid: str,
+        languages: Optional[List[str]] = None,
     ) -> FileContentMetadata:
+        """Extract content metadata from an Excel file."""
         workbook = openpyxl.load_workbook(BytesIO(file_bytes), data_only=True)
         sheets: List[Sheet] = []
 
@@ -81,6 +85,6 @@ class ExcelExtractor:
             file_name=file_name,
             file_bytes_size=len(file_bytes),
             content_type=FileContentType.EXCEL,
-            languages=["zh"],
+            languages=languages or ["zh"],
             file_content=content,
         )

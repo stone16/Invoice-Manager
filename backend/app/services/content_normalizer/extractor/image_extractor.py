@@ -11,10 +11,14 @@ from app.services.content_normalizer.extractor.ocr_engine import OcrSpan, Paddle
 
 
 class ImageExtractor:
+    """Extractor for image-based documents using OCR."""
+
     def __init__(self, ocr_engine: Optional[PaddleOcrEngine] = None):
+        """Initialize extractor with optional OCR engine."""
         self._ocr_engine = ocr_engine or PaddleOcrEngine()
 
     def _spans_to_boxes(self, spans: List[OcrSpan]) -> List[BoundingBox]:
+        """Convert OCR spans to bounding boxes."""
         return [
             BoundingBox(
                 id="",
@@ -33,10 +37,15 @@ class ImageExtractor:
         doc_index: int,
         file_name: str,
         file_object_fid: str,
+        languages: Optional[List[str]] = None,
     ) -> FileContentMetadata:
-        image = Image.open(BytesIO(file_bytes))
-        width, height = image.size
-        spans = self._ocr_engine.extract(file_bytes)
+        """Extract OCR content from an image file."""
+        with Image.open(BytesIO(file_bytes)) as image:
+            width, height = image.size
+            if hasattr(self._ocr_engine, "extract_from_image"):
+                spans = self._ocr_engine.extract_from_image(image)
+            else:
+                spans = self._ocr_engine.extract(file_bytes)
         bounding_boxes = self._spans_to_boxes(spans)
         page = Page(id=1, width=width, height=height, bounding_boxes=bounding_boxes)
         content = PageContent(pages=[page])
@@ -46,6 +55,6 @@ class ImageExtractor:
             file_name=file_name,
             file_bytes_size=len(file_bytes),
             content_type=FileContentType.IMAGE,
-            languages=["zh"],
+            languages=languages or ["zh"],
             file_content=content,
         )

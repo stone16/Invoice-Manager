@@ -191,7 +191,7 @@ def apply_weighted_truncation(
 
     # Truncate each page
     truncated_texts: List[str] = []
-    for page_lines, allocation in zip(pages, allocations):
+    for page_lines, allocation in zip(pages, allocations, strict=True):
         if allocation <= 0:
             continue
         truncated = truncate_with_tags(page_lines, allocation)

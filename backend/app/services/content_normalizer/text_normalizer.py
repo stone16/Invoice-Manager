@@ -7,6 +7,7 @@ _CJK_PATTERN = re.compile(r"([\u4e00-\u9fff])\s+([\u4e00-\u9fff])")
 
 
 def normalize_chinese_text(text: str) -> str:
+    """Normalize spacing in Chinese text by removing CJK gaps."""
     if not text:
         return ""
     normalized = " ".join(text.split())
@@ -19,6 +20,7 @@ def normalize_chinese_text(text: str) -> str:
 
 
 def normalize_text(text: str) -> Tuple[bool, str]:
+    """Normalize text and return validity with processed result."""
     if not text:
         return False, ""
     stripped = text.strip()

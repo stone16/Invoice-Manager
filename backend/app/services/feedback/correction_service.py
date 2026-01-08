@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
@@ -39,24 +38,11 @@ class CorrectionService:
         # Get current result
         current_result = await self._get_current_result(flow_id, result_id)
 
-        # Get current version
-        current_version = current_result.get("version", 1) if current_result else 1
-
-        # Apply correction to output_values
-        output_values = current_result.get("output_values", {}) if current_result else {}
-        updated_values = self._apply_correction(output_values, correction)
-
-        # Create new version
-        new_version = current_version + 1
-
-        # Store new result version
-        new_result = {
-            "flow_id": flow_id,
-            "version": new_version,
-            "output_values": updated_values,
-            "data_origin": "USER",
-            "created_at": datetime.utcnow().isoformat(),
-        }
+        new_version, updated_values, new_result = self._build_new_result(
+            flow_id=flow_id,
+            current_result=current_result,
+            corrections=[correction],
+        )
 
         # In real implementation, save to database
         # await self._save_result(new_result)
@@ -88,25 +74,11 @@ class CorrectionService:
         # Get current result
         current_result = await self._get_current_result(flow_id, result_id)
 
-        # Get current version
-        current_version = current_result.get("version", 1) if current_result else 1
-
-        # Apply all corrections
-        output_values = current_result.get("output_values", {}) if current_result else {}
-        for correction in corrections:
-            output_values = self._apply_correction(output_values, correction)
-
-        # Create new version
-        new_version = current_version + 1
-
-        # Store new result version
-        new_result = {
-            "flow_id": flow_id,
-            "version": new_version,
-            "output_values": output_values,
-            "data_origin": "USER",
-            "created_at": datetime.utcnow().isoformat(),
-        }
+        new_version, output_values, new_result = self._build_new_result(
+            flow_id=flow_id,
+            current_result=current_result,
+            corrections=corrections,
+        )
 
         return {
             "version": new_version,
@@ -162,6 +134,28 @@ class CorrectionService:
             "output_values": {},
         }
 
+    def _build_new_result(
+        self,
+        flow_id: int,
+        current_result: Optional[Dict[str, Any]],
+        corrections: List[Dict[str, Any]],
+    ) -> tuple[int, Dict[str, Any], Dict[str, Any]]:
+        """Build a new result version after applying corrections."""
+        current_version = current_result.get("version", 1) if current_result else 1
+        output_values = current_result.get("output_values", {}) if current_result else {}
+        for correction in corrections:
+            output_values = self._apply_correction(output_values, correction)
+
+        new_version = current_version + 1
+        new_result = {
+            "flow_id": flow_id,
+            "version": new_version,
+            "output_values": output_values,
+            "data_origin": "USER",
+            "created_at": datetime.utcnow().isoformat(),
+        }
+        return new_version, output_values, new_result
+
     def _apply_correction(
         self,
         output_values: Dict[str, Any],
@@ -193,17 +187,10 @@ class CorrectionService:
 
         # Set the value
         last_part = parts[-1]
-        if last_part == "value" and len(parts) > 1:
-            # Setting a field's value - update the parent field
-            parent_field = parts[-2]
-            if parent_field not in result:
-                result[parent_field] = {}
-            result[parent_field]["value"] = new_value
-            if new_block_id:
-                if "data_source" not in result[parent_field]:
-                    result[parent_field]["data_source"] = {}
-                result[parent_field]["data_source"]["block_id"] = new_block_id
-        else:
-            current[last_part] = new_value
+        current[last_part] = new_value
+        if new_block_id and last_part == "value":
+            if "data_source" not in current:
+                current["data_source"] = {}
+            current["data_source"]["block_id"] = new_block_id
 
         return result

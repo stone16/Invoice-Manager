@@ -1,13 +1,8 @@
 from __future__ import annotations
 
 from io import BytesIO
-from pathlib import Path
-import sys
 
 import pytest
-
-ROOT = Path(__file__).resolve().parents[2]
-sys.path.append(str(ROOT / "backend"))
 
 # Check if paddle is available (required for PaddleOCR)
 try:

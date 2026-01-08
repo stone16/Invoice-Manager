@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 from difflib import SequenceMatcher
 from typing import Any, Dict, List, Optional, Tuple
@@ -11,6 +12,8 @@ try:
 except ImportError:
     tiktoken = None  # type: ignore
 
+logger = logging.getLogger(__name__)
+
 
 def get_openai_client():
     """Get OpenAI client with API key from environment."""
@@ -18,6 +21,12 @@ def get_openai_client():
 
     return OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
+
+def get_async_openai_client():
+    """Get async OpenAI client with API key from environment."""
+    from openai import AsyncOpenAI
+
+    return AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 def generate_embedding(text: str, model: str = "text-embedding-3-small") -> List[float]:
     """Generate a 1536-dimensional embedding for the given text.
@@ -46,8 +55,8 @@ async def generate_embeddings_batch(
     Returns:
         List of embedding vectors.
     """
-    client = get_openai_client()
-    response = client.embeddings.create(input=texts, model=model)
+    client = get_async_openai_client()
+    response = await client.embeddings.create(input=texts, model=model)
     return [item.embedding for item in response.data]
 
 
@@ -115,8 +124,8 @@ def truncate_to_tokens(text: str, max_tokens: int) -> str:
 
             truncated_tokens = tokens[:max_tokens]
             return encoding.decode(truncated_tokens)
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("tiktoken encoding failed, using fallback: %s", exc)
 
     # Fallback: rough estimate of 4 chars per token
     max_chars = max_tokens * 4
@@ -134,14 +143,21 @@ def deduplicate_lines(text: str, similarity_threshold: float = 0.95) -> str:
 
     Returns:
         Deduplicated text.
+
+    Note:
+        Similarity comparisons are O(n^2) in the worst case.
     """
     lines = text.split("\n")
     unique_lines: List[str] = []
+    seen_exact: set[str] = set()
 
     for line in lines:
         line_stripped = line.strip()
         if not line_stripped:
             unique_lines.append(line)
+            continue
+
+        if line_stripped in seen_exact:
             continue
 
         is_duplicate = False
@@ -158,6 +174,7 @@ def deduplicate_lines(text: str, similarity_threshold: float = 0.95) -> str:
 
         if not is_duplicate:
             unique_lines.append(line)
+            seen_exact.add(line_stripped)
 
     return "\n".join(unique_lines)
 

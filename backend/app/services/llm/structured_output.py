@@ -22,6 +22,7 @@ def parse_extraction_result(
 
     Raises:
         ValueError: If the output cannot be parsed.
+        TypeError: If the parsed output is not a dict.
     """
     # If string, parse as JSON
     if isinstance(raw_output, str):
@@ -30,13 +31,13 @@ def parse_extraction_result(
             cleaned = extract_json_from_text(raw_output)
             result = json.loads(cleaned)
         except json.JSONDecodeError as e:
-            raise ValueError(f"Failed to parse JSON output: {e}")
+            raise ValueError(f"Failed to parse JSON output: {e}") from e
     else:
         result = raw_output
 
     # Validate structure
     if not isinstance(result, dict):
-        raise ValueError(f"Expected dict output, got {type(result).__name__}")
+        raise TypeError(f"Expected dict output, got {type(result).__name__}")
 
     # Normalize the result structure
     return normalize_result(result)

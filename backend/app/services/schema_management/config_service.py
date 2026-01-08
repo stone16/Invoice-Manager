@@ -10,6 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.digi_flow import ConfigStatus, DigiFlowConfig, SourceContentType
+from app.services.schema_management.schema_versioning import next_schema_version
 
 logger = logging.getLogger(__name__)
 
@@ -47,6 +48,10 @@ async def create_config(
     Returns:
         Created config record
     """
+    existing = await get_config_by_slug(db, slug)
+    if existing:
+        raise ValueError(f"Config with slug '{slug}' already exists")
+
     new_config = DigiFlowConfig(
         slug=slug,
         name=name,
@@ -104,37 +109,49 @@ def _default_prompt_config() -> Dict[str, Any]:
 async def get_config(
     db: AsyncSession,
     config_id: int,
+    version: Optional[int] = None,
 ) -> Optional[DigiFlowConfig]:
     """Get a config by ID.
 
     Args:
         db: Database session
         config_id: Config ID
+        version: Optional specific version (defaults to latest)
 
     Returns:
         Config record or None
     """
     query = select(DigiFlowConfig).where(DigiFlowConfig.id == config_id)
+    if version is not None:
+        query = query.where(DigiFlowConfig.version == version)
+    else:
+        query = query.order_by(DigiFlowConfig.version.desc())
     result = await db.execute(query)
-    return result.scalar_one_or_none()
+    return result.scalar_one_or_none() if version is not None else result.scalars().first()
 
 
 async def get_config_by_slug(
     db: AsyncSession,
     slug: str,
+    version: Optional[int] = None,
 ) -> Optional[DigiFlowConfig]:
     """Get a config by slug.
 
     Args:
         db: Database session
         slug: Config slug
+        version: Optional specific version (defaults to latest)
 
     Returns:
         Config record or None
     """
     query = select(DigiFlowConfig).where(DigiFlowConfig.slug == slug)
+    if version is not None:
+        query = query.where(DigiFlowConfig.version == version)
+    else:
+        query = query.order_by(DigiFlowConfig.version.desc())
     result = await db.execute(query)
-    return result.scalar_one_or_none()
+    return result.scalar_one_or_none() if version is not None else result.scalars().first()
 
 
 async def list_configs(
@@ -142,6 +159,7 @@ async def list_configs(
     status: Optional[ConfigStatus] = None,
     domain: Optional[str] = None,
     schema_id: Optional[int] = None,
+    include_all_versions: bool = False,
 ) -> List[DigiFlowConfig]:
     """List all configs.
 
@@ -150,6 +168,7 @@ async def list_configs(
         status: Optional status filter
         domain: Optional domain filter
         schema_id: Optional schema ID filter
+        include_all_versions: Whether to include all versions
 
     Returns:
         List of config records
@@ -163,9 +182,20 @@ async def list_configs(
     if schema_id is not None:
         query = query.where(DigiFlowConfig.schema_id == schema_id)
 
-    query = query.order_by(DigiFlowConfig.created_at.desc())
+    query = query.order_by(DigiFlowConfig.id, DigiFlowConfig.version.desc())
     result = await db.execute(query)
-    return list(result.scalars().all())
+    configs = list(result.scalars().all())
+
+    if include_all_versions:
+        return configs
+
+    seen_ids = set()
+    latest_configs = []
+    for config in configs:
+        if config.id not in seen_ids:
+            seen_ids.add(config.id)
+            latest_configs.append(config)
+    return latest_configs
 
 
 async def update_config(
@@ -179,6 +209,7 @@ async def update_config(
     workflow_config: Optional[Dict[str, Any]] = None,
     prompt_config: Optional[Dict[str, Any]] = None,
     schema_validation: Optional[Dict[str, Any]] = None,
+    create_new_version: bool = True,
     updated_by: Optional[Dict[str, Any]] = None,
 ) -> Optional[DigiFlowConfig]:
     """Update a config.
@@ -194,6 +225,7 @@ async def update_config(
         workflow_config: New workflow config (optional)
         prompt_config: New prompt config (optional)
         schema_validation: New validation settings (optional)
+        create_new_version: Whether to create a new version
         updated_by: Optional updater info
 
     Returns:
@@ -202,6 +234,38 @@ async def update_config(
     existing = await get_config(db, config_id)
     if not existing:
         return None
+
+    if create_new_version:
+        query = select(DigiFlowConfig.version).where(
+            DigiFlowConfig.id == config_id
+        )
+        result = await db.execute(query)
+        versions = [row[0] for row in result.all()]
+        new_version = next_schema_version(versions)
+
+        new_config = DigiFlowConfig(
+            id=config_id,
+            slug=existing.slug,
+            name=name or existing.name,
+            description=description if description is not None else existing.description,
+            domain=domain if domain is not None else existing.domain,
+            schema_id=schema_id if schema_id is not None else existing.schema_id,
+            schema_version=schema_version if schema_version is not None else existing.schema_version,
+            source_content_type=existing.source_content_type,
+            workflow_config=workflow_config if workflow_config is not None else existing.workflow_config,
+            prompt_config=prompt_config if prompt_config is not None else existing.prompt_config,
+            schema_validation=schema_validation if schema_validation is not None else existing.schema_validation,
+            version=new_version,
+            status=ConfigStatus.ACTIVE,
+            created_at=existing.created_at,
+            created_by=existing.created_by,
+            updated_at=datetime.utcnow(),
+            updated_by=updated_by,
+        )
+        db.add(new_config)
+        await db.flush()
+        await db.refresh(new_config)
+        return new_config
 
     if name is not None:
         existing.name = name
@@ -243,13 +307,17 @@ async def archive_config(
     Returns:
         True if archived, False if not found
     """
-    existing = await get_config(db, config_id)
-    if not existing:
+    query = select(DigiFlowConfig).where(DigiFlowConfig.id == config_id)
+    result = await db.execute(query)
+    configs = list(result.scalars().all())
+
+    if not configs:
         return False
 
-    existing.status = ConfigStatus.ARCHIVED
-    existing.deleted_at = datetime.utcnow()
-    existing.deleted_by = deleted_by
+    for config in configs:
+        config.status = ConfigStatus.ARCHIVED
+        config.deleted_at = datetime.utcnow()
+        config.deleted_by = deleted_by
 
     await db.flush()
     return True

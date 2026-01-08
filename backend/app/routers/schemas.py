@@ -67,7 +67,7 @@ async def create_schema_endpoint(
         await db.commit()
         return SchemaResponse.from_orm_model(result)
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
 
 @router.get("/schemas", response_model=SchemaListResponse)
@@ -123,7 +123,7 @@ async def update_schema_endpoint(
         await db.commit()
         return SchemaResponse.from_orm_model(result)
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
 
 @router.delete("/schemas/{schema_id}")
@@ -170,6 +170,7 @@ async def list_configs_endpoint(
     status: Optional[int] = Query(None, description="Status filter (1=ACTIVE, 2=ARCHIVED)"),
     domain: Optional[str] = Query(None, description="Domain filter"),
     schema_id: Optional[int] = Query(None, description="Schema ID filter"),
+    include_all_versions: bool = Query(False, description="Include all versions"),
     db: AsyncSession = Depends(get_db),
 ):
     """List all configs."""
@@ -179,6 +180,7 @@ async def list_configs_endpoint(
         status=status_enum,
         domain=domain,
         schema_id=schema_id,
+        include_all_versions=include_all_versions,
     )
     return ConfigListResponse(
         items=[ConfigResponse.model_validate(c) for c in configs],
@@ -189,10 +191,11 @@ async def list_configs_endpoint(
 @router.get("/configs/{config_id}", response_model=ConfigResponse)
 async def get_config_endpoint(
     config_id: int,
+    version: Optional[int] = Query(None, description="Specific version"),
     db: AsyncSession = Depends(get_db),
 ):
     """Get a config by ID."""
-    result = await get_config(db=db, config_id=config_id)
+    result = await get_config(db=db, config_id=config_id, version=version)
     if not result:
         raise HTTPException(status_code=404, detail="Config not found")
     return ConfigResponse.model_validate(result)
@@ -216,6 +219,7 @@ async def update_config_endpoint(
         workflow_config=config_data.workflow_config.model_dump() if config_data.workflow_config else None,
         prompt_config=config_data.prompt_config.model_dump() if config_data.prompt_config else None,
         schema_validation=config_data.schema_validation,
+        create_new_version=config_data.create_new_version,
     )
     if not result:
         raise HTTPException(status_code=404, detail="Config not found")

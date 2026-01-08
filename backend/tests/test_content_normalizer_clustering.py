@@ -1,11 +1,5 @@
 from __future__ import annotations
 
-from pathlib import Path
-import sys
-
-ROOT = Path(__file__).resolve().parents[2]
-sys.path.append(str(ROOT / "backend"))
-
 from app.services.content_normalizer.models import BoundingBox  # noqa: E402
 from app.services.content_normalizer.clustering.dbscan_algorithm import (  # noqa: E402
     calculate_adaptive_eps,

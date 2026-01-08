@@ -118,12 +118,22 @@ def _create_azure_client(
 
     Returns:
         AzureChatOpenAI instance.
+
+    Raises:
+        ValueError: If required Azure configuration is missing.
     """
     from langchain_openai import AzureChatOpenAI
 
     key = api_key or os.getenv("AZURE_OPENAI_API_KEY")
     endpoint = config.get("azure_endpoint") or os.getenv("AZURE_OPENAI_ENDPOINT")
     deployment = config.get("deployment_name") or config.get("model")
+
+    if not endpoint:
+        raise ValueError(
+            "Azure endpoint must be provided via config.azure_endpoint or AZURE_OPENAI_ENDPOINT"
+        )
+    if not deployment:
+        raise ValueError("Azure deployment name must be provided via config")
 
     return AzureChatOpenAI(
         api_key=key,
@@ -154,7 +164,10 @@ def _create_anthropic_client(
     # Map model name if needed
     model = model_kwargs.get("model", "claude-3-opus-20240229")
     if model.startswith("gpt"):
-        model = "claude-3-opus-20240229"
+        raise ValueError(
+            f"Invalid model '{model}' for Anthropic provider. "
+            "Use a Claude model name (e.g., 'claude-3-opus-20240229')"
+        )
 
     return ChatAnthropic(
         api_key=key,

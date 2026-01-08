@@ -1,11 +1,5 @@
 from __future__ import annotations
 
-from pathlib import Path
-import sys
-
-ROOT = Path(__file__).resolve().parents[2]
-sys.path.append(str(ROOT / "backend"))
-
 from app.services.content_normalizer.block_id import (  # noqa: E402
     is_valid_excel_block_id,
     is_valid_merged_cell_block_id,
