@@ -4,7 +4,7 @@ from fastapi.responses import JSONResponse
 from slowapi.errors import RateLimitExceeded
 
 from app.config import get_settings
-from app.routers import health, invoices, settings as settings_router
+from app.routers import health, invoices, schemas, settings as settings_router
 from app.rate_limit import limiter
 
 settings = get_settings()
@@ -39,6 +39,7 @@ app.add_middleware(
 app.include_router(health.router, prefix="/api", tags=["Health"])
 app.include_router(invoices.router, prefix="/api/invoices", tags=["Invoices"])
 app.include_router(settings_router.router, prefix="/api/settings", tags=["Settings"])
+app.include_router(schemas.router, prefix="/api", tags=["Schemas", "Configs"])
 
 
 @app.on_event("startup")
