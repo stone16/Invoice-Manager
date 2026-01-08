@@ -53,10 +53,15 @@ def test_pdf_extractor_extracts_text_with_positions(text: str):
 
 def test_pdf_extractor_merges_embedded_image_ocr_results():
     import fitz
+    from PIL import Image
 
     doc = fitz.open()
     page = doc.new_page(width=200, height=200)
     page.insert_text((10, 10), "Header")
+    image = Image.new("RGB", (40, 20), color=(255, 255, 255))
+    buffer = BytesIO()
+    image.save(buffer, format="PNG")
+    page.insert_image(fitz.Rect(0, 20, 40, 40), stream=buffer.getvalue())
     pdf_bytes = doc.tobytes()
     doc.close()
 
