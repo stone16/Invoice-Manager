@@ -6,6 +6,7 @@ from typing import List, Optional
 from PIL import Image
 
 from app.models.digi_flow import FileContentType
+from app.services.content_normalizer.block_id import build_image_block_id
 from app.services.content_normalizer.models import BoundingBox, FileContentMetadata, Page, PageContent
 from app.services.content_normalizer.extractor.ocr_engine import OcrSpan, PaddleOcrEngine
 
@@ -17,18 +18,18 @@ class ImageExtractor:
         """Initialize extractor with optional OCR engine."""
         self._ocr_engine = ocr_engine or PaddleOcrEngine()
 
-    def _spans_to_boxes(self, spans: List[OcrSpan]) -> List[BoundingBox]:
+    def _spans_to_boxes(self, spans: List[OcrSpan], doc_index: int, page_index: int) -> List[BoundingBox]:
         """Convert OCR spans to bounding boxes."""
         return [
             BoundingBox(
-                id="",
+                id=build_image_block_id(doc_index, page_index, idx),
                 raw_value=span.text,
                 top_left_x=span.top_left[0],
                 top_left_y=span.top_left[1],
                 bottom_right_x=span.bottom_right[0],
                 bottom_right_y=span.bottom_right[1],
             )
-            for span in spans
+            for idx, span in enumerate(spans, start=1)
         ]
 
     def extract(
@@ -46,7 +47,7 @@ class ImageExtractor:
                 spans = self._ocr_engine.extract_from_image(image)
             else:
                 spans = self._ocr_engine.extract(file_bytes)
-        bounding_boxes = self._spans_to_boxes(spans)
+        bounding_boxes = self._spans_to_boxes(spans, doc_index=doc_index, page_index=1)
         page = Page(id=1, width=width, height=height, bounding_boxes=bounding_boxes)
         content = PageContent(pages=[page])
         return FileContentMetadata(

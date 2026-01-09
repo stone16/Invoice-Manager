@@ -67,10 +67,15 @@ class PDFExtractor:
             xref = img[0]
             image_info = pdf.extract_image(xref)
             image_bytes = image_info["image"]
-            img_width = image_info.get("width", 1)
-            img_height = image_info.get("height", 1)
+            img_width = image_info.get("width", 0) or 0
+            img_height = image_info.get("height", 0) or 0
+            if img_width <= 0 or img_height <= 0:
+                continue
             for rect in page.get_image_rects(xref):
-                x0, y0, x1, y1 = rect.x0, rect.y0, rect.x1, rect.y1
+                x0, x1 = sorted((rect.x0, rect.x1))
+                y0, y1 = sorted((rect.y0, rect.y1))
+                if x1 <= x0 or y1 <= y0:
+                    continue
                 scale_x = (x1 - x0) / img_width
                 scale_y = (y1 - y0) / img_height
                 spans = self._ocr_engine.extract(image_bytes)

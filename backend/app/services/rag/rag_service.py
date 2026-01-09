@@ -10,7 +10,7 @@ from app.services.rag.example_builder import (
     get_zero_shot_example,
     select_partial_content,
 )
-from app.services.rag.vector_repository import VectorRepository
+from app.services.rag.vector_repository import VectorRepository, VectorSearchResult
 
 
 # Default RAG configuration values
@@ -132,10 +132,16 @@ class RAGService:
         # Build few-shot examples from retrieved documents
         examples = []
         for doc in similar_docs:
+            if isinstance(doc, VectorSearchResult):
+                vector = doc.vector
+                distance = doc.distance
+            else:
+                vector = doc
+                distance = getattr(doc, "distance", 0.0)
             example_data = {
-                "reference_input": doc.reference_input,
-                "reference_output": doc.reference_output,
-                "distance": getattr(doc, "distance", 0.0),
+                "reference_input": vector.reference_input,
+                "reference_output": vector.reference_output,
+                "distance": distance,
             }
             examples.append(example_data)
 
@@ -145,9 +151,7 @@ class RAGService:
             "few_shot_examples": formatted_examples,
             "source": "rag",
             "match_count": len(similar_docs),
-            "best_distance": getattr(similar_docs[0], "distance", 0.0)
-            if similar_docs
-            else None,
+            "best_distance": examples[0]["distance"] if examples else None,
         }
 
     def _get_zero_shot_result(

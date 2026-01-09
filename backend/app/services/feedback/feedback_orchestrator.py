@@ -33,6 +33,13 @@ class FeedbackOrchestrator:
         self.training_service = training_service
         self.confirmation_service = confirmation_service
 
+    def _validate_correction(self, correction: Dict[str, Any]) -> None:
+        """Validate correction payload before processing."""
+        required_fields = ("field_path", "old_value", "new_value")
+        missing = [field for field in required_fields if field not in correction]
+        if missing:
+            raise ValueError(f"Correction missing required fields: {missing}")
+
     async def process_correction_and_confirm(
         self,
         flow_id: int,
@@ -59,6 +66,7 @@ class FeedbackOrchestrator:
         Returns:
             Workflow result with confirmation and training status.
         """
+        self._validate_correction(correction)
         # NOTE: If strict consistency is required, call this within a DB transaction.
         # Step 1: Submit correction
         correction_result = await self.correction_service.submit_correction(
@@ -128,6 +136,10 @@ class FeedbackOrchestrator:
         Returns:
             Workflow result with confirmation and training status.
         """
+        if not corrections:
+            raise ValueError("At least one correction is required")
+        for correction in corrections:
+            self._validate_correction(correction)
         # NOTE: If strict consistency is required, call this within a DB transaction.
         # Step 1: Submit bulk corrections (single version)
         correction_result = await self.correction_service.submit_bulk_corrections(

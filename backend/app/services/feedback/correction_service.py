@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from copy import deepcopy
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
@@ -170,7 +171,7 @@ class CorrectionService:
         Returns:
             Updated output values.
         """
-        result = output_values.copy()
+        result = deepcopy(output_values)
         field_path = correction["field_path"]
         new_value = correction["new_value"]
         new_block_id = correction.get("block_id")

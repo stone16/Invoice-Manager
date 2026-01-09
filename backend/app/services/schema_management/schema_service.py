@@ -3,13 +3,12 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.digi_flow import ConfigStatus, DigiFlowSchema
+from app.models.digi_flow import ConfigStatus, DigiFlowSchema, _utc_now
 from app.services.schema_management.schema_parser import parse_yaml_schema
 from app.services.schema_management.schema_validator import validate_json_schema
 from app.services.schema_management.schema_versioning import next_schema_version
@@ -50,7 +49,7 @@ async def create_schema(
         yaml_schema=yaml_schema,
         version=1,
         status=ConfigStatus.ACTIVE,
-        created_at=datetime.utcnow(),
+        created_at=_utc_now(),
         created_by=created_by,
     )
     db.add(new_schema)
@@ -220,7 +219,7 @@ async def update_schema(
             status=ConfigStatus.ACTIVE,
             created_at=existing.created_at,
             created_by=existing.created_by,
-            updated_at=datetime.utcnow(),
+            updated_at=_utc_now(),
             updated_by=updated_by,
         )
         db.add(new_schema)
@@ -234,7 +233,7 @@ async def update_schema(
             existing.yaml_schema = yaml_schema
         if name is not None:
             existing.name = name
-        existing.updated_at = datetime.utcnow()
+        existing.updated_at = _utc_now()
         existing.updated_by = updated_by
         await db.flush()
         await db.refresh(existing)
@@ -265,7 +264,7 @@ async def archive_schema(
 
     for schema in schemas:
         schema.status = ConfigStatus.ARCHIVED
-        schema.deleted_at = datetime.utcnow()
+        schema.deleted_at = _utc_now()
         schema.deleted_by = deleted_by
 
     await db.flush()

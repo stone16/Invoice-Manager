@@ -3,12 +3,21 @@
 from __future__ import annotations
 
 import json
+from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
-from sqlalchemy import select, text
+from sqlalchemy import literal_column, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.digi_flow import RagTrainingDataVector
+
+
+@dataclass(frozen=True)
+class VectorSearchResult:
+    """Typed result for similarity search responses."""
+
+    vector: RagTrainingDataVector
+    distance: float
 
 
 class VectorRepository:
@@ -80,7 +89,7 @@ class VectorRepository:
         config_id: int,
         distance_threshold: float = 0.3,
         limit: int = 5,
-    ) -> List[RagTrainingDataVector]:
+    ) -> List[VectorSearchResult]:
         """Perform cosine similarity search for similar vectors.
 
         Args:
@@ -110,8 +119,13 @@ class VectorRepository:
             """
         )
 
+        statement = select(
+            RagTrainingDataVector,
+            literal_column("distance"),
+        ).from_statement(query)
+
         result = await self.db.execute(
-            query,
+            statement,
             {
                 "embedding": embedding_str,
                 "config_id": config_id,
@@ -120,32 +134,12 @@ class VectorRepository:
             },
         )
 
-        rows = result.fetchall()
+        rows = result.all()
 
-        # Convert rows to model instances
-        vectors = []
-        for row in rows:
-            vector = RagTrainingDataVector(
-                id=row.id,
-                flow_id=row.flow_id,
-                config_id=row.config_id,
-                schema_id=row.schema_id,
-                schema_version=row.schema_version,
-                result_id=row.result_id,
-                result_version=row.result_version,
-                source_content_context=row.source_content_context,
-                source_content_context_idx=row.source_content_context_idx,
-                reference_input=row.reference_input,
-                reference_output=row.reference_output,
-                embedding=row.embedding,
-                created_at=row.created_at,
-                created_by=row.created_by,
-            )
-            # Store distance as extra attribute
-            vector.distance = row.distance  # type: ignore
-            vectors.append(vector)
-
-        return vectors
+        return [
+            VectorSearchResult(vector=row[0], distance=row[1])
+            for row in rows
+        ]
 
     async def get_by_flow_id(
         self,

@@ -452,12 +452,12 @@ class TestFeedbackStatistics:
 
         # Mock field statistics with proper MagicMock result
         field_stats = [
-            MagicMock(field_path="invoice_number", corrections=5, total=100),
-            MagicMock(field_path="tax_id", corrections=45, total=100),  # >30%
-            MagicMock(field_path="total", corrections=35, total=100),  # >30%
+            MagicMock(field_path="invoice_number", corrections=5, total_extractions=100),
+            MagicMock(field_path="tax_id", corrections=45, total_extractions=100),  # >30%
+            MagicMock(field_path="total", corrections=35, total_extractions=100),  # >30%
         ]
         mock_result = MagicMock()
-        mock_result.scalars.return_value.all.return_value = field_stats
+        mock_result.all.return_value = field_stats
         mock_db.execute.return_value = mock_result
 
         problematic = await service.get_problematic_fields(

@@ -14,19 +14,39 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
+_TIKTOKEN_ENCODER = None
+
+
+def _get_tiktoken_encoder():
+    """Return a cached tiktoken encoder if available."""
+    global _TIKTOKEN_ENCODER
+    if _TIKTOKEN_ENCODER is None and tiktoken is not None:
+        try:
+            _TIKTOKEN_ENCODER = tiktoken.get_encoding("cl100k_base")
+        except (ValueError, KeyError) as exc:
+            logger.debug("Failed to initialize tiktoken encoder: %s", exc)
+    return _TIKTOKEN_ENCODER
+
 
 def get_openai_client():
     """Get OpenAI client with API key from environment."""
     from openai import OpenAI
 
-    return OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+    api_key = os.getenv("OPENAI_API_KEY")
+    if not api_key:
+        raise ValueError("OPENAI_API_KEY environment variable is required")
+    return OpenAI(api_key=api_key)
 
 
 def get_async_openai_client():
     """Get async OpenAI client with API key from environment."""
     from openai import AsyncOpenAI
 
-    return AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+    api_key = os.getenv("OPENAI_API_KEY")
+    if not api_key:
+        raise ValueError("OPENAI_API_KEY environment variable is required")
+    return AsyncOpenAI(api_key=api_key)
+
 
 def generate_embedding(text: str, model: str = "text-embedding-3-small") -> List[float]:
     """Generate a 1536-dimensional embedding for the given text.
@@ -84,17 +104,21 @@ def prepare_weighted_text(
 
     # Calculate weights: first page = 1.0, decreasing by 0.1 per page
     weights = []
-    for i, page in enumerate(sorted_pages):
+    for i, _ in enumerate(sorted_pages):
         weight = max(0.1, 1.0 - (i * 0.1))
         weights.append(weight)
 
-    # Build weighted text by repeating content based on weight
-    # Higher weight = more representation in final text
+    # Build weighted text by allocating more token budget to higher weights
     text_parts = []
-    for page, weight in zip(sorted_pages, weights):
+    total_weight = sum(weights)
+    for page, weight in zip(sorted_pages, weights, strict=True):
         content = page.get("content", "")
-        # For simplicity, include content once but prioritize first pages
-        text_parts.append(content)
+        if not content or total_weight <= 0:
+            continue
+        budget = int(max_tokens * (weight / total_weight))
+        if budget <= 0:
+            continue
+        text_parts.append(truncate_to_tokens(content, budget))
 
     combined_text = "\n\n".join(text_parts)
 
@@ -114,9 +138,9 @@ def truncate_to_tokens(text: str, max_tokens: int) -> str:
     Returns:
         Truncated text.
     """
-    if tiktoken is not None:
+    encoding = _get_tiktoken_encoder()
+    if encoding is not None:
         try:
-            encoding = tiktoken.get_encoding("cl100k_base")
             tokens = encoding.encode(text)
 
             if len(tokens) <= max_tokens:
@@ -124,7 +148,7 @@ def truncate_to_tokens(text: str, max_tokens: int) -> str:
 
             truncated_tokens = tokens[:max_tokens]
             return encoding.decode(truncated_tokens)
-        except Exception as exc:
+        except (ValueError, KeyError) as exc:
             logger.debug("tiktoken encoding failed, using fallback: %s", exc)
 
     # Fallback: rough estimate of 4 chars per token

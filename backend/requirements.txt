@@ -19,7 +19,7 @@ opencv-python-headless>=4.8.0
 
 # LLM (optional)
 openai==1.109.1
-langchain==1.2.2
+langchain==1.2.5
 langchain-openai==1.1.7
 langsmith==0.6.1
 

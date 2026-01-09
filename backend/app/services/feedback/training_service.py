@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Set
 
@@ -31,7 +32,7 @@ def validate_training_data(training_data: Dict[str, Any]) -> List[str]:
 
     # Check embedding dimensions (must be 1536 for OpenAI embeddings)
     embedding = training_data.get("embedding", [])
-    if len(embedding) != 1536:
+    if embedding and len(embedding) != 1536:
         errors.append(f"Embedding must have 1536 dimensions, got {len(embedding)}")
 
     # Check that all block_ids in output exist in input
@@ -152,7 +153,10 @@ class TrainingDataService:
         embedding = []
         if self.embedding_service:
             embedding_text = self._build_embedding_text(content, extraction_result)
-            embedding = self.embedding_service.generate_embedding(embedding_text)
+            embedding = await asyncio.to_thread(
+                self.embedding_service.generate_embedding,
+                embedding_text,
+            )
 
         training_data = {
             "flow_id": flow_id,
@@ -206,7 +210,10 @@ class TrainingDataService:
         embedding = []
         if self.embedding_service:
             embedding_text = self._build_embedding_text(content, extraction_result)
-            embedding = self.embedding_service.generate_embedding(embedding_text)
+            embedding = await asyncio.to_thread(
+                self.embedding_service.generate_embedding,
+                embedding_text,
+            )
 
         updated_data = {
             "id": existing.id if existing else None,

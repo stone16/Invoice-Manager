@@ -25,6 +25,11 @@ def build_merged_cell_block_id(doc_index: int, sheet_index: int, start: str, end
     return f"{doc_index}.{sheet_index}.{start}:{end}"
 
 
+def build_image_block_id(doc_index: int, page_index: int, span_index: int) -> str:
+    """Build a PDF-style block ID for image OCR spans."""
+    return build_pdf_block_id(doc_index, page_index, 1, 1, span_index)
+
+
 def is_valid_pdf_block_id(block_id: str) -> bool:
     """Return True if a PDF block ID matches the expected pattern."""
     return bool(_PDF_BLOCK_ID_PATTERN.match(block_id))

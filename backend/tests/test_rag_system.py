@@ -145,7 +145,7 @@ class TestPgvectorIntegration:
 
         # Mock execute result
         mock_result = MagicMock()
-        mock_result.scalars.return_value.all.return_value = []
+        mock_result.all.return_value = []
         mock_db.execute.return_value = mock_result
 
         results = await repo.similarity_search(
@@ -170,7 +170,7 @@ class TestPgvectorIntegration:
         config_id = 42
 
         mock_result = MagicMock()
-        mock_result.scalars.return_value.all.return_value = []
+        mock_result.all.return_value = []
         mock_db.execute.return_value = mock_result
 
         await repo.similarity_search(
@@ -194,7 +194,7 @@ class TestPgvectorIntegration:
         query_embedding = [0.1] * 1536
 
         mock_result = MagicMock()
-        mock_result.scalars.return_value.all.return_value = []
+        mock_result.all.return_value = []
         mock_db.execute.return_value = mock_result
 
         # Should use distance_threshold in query
