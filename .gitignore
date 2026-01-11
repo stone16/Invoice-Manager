@@ -1,6 +1,9 @@
 # OpenSpec
 openspec/
 
+# Runs
+runs/
+
 # Claude
 .claude/
 .codex/
