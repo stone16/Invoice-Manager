@@ -199,6 +199,7 @@ import type {
   DigiFlowConfigUpdate,
   DigiFlowCreate,
   DigiFlowWithResult,
+  DigiFlowResultFieldAudit,
   FeedbackSubmission,
   FeedbackResponse,
   SchemaListResponse,
@@ -274,21 +275,37 @@ export const updateConfig = async (id: number, data: DigiFlowConfigUpdate): Prom
 // Flow Management APIs
 
 export interface FlowListParams {
-  page?: number;
-  page_size?: number;
+  limit?: number;     // Number of items to return (default: 50, max: 100)
+  offset?: number;    // Number of items to skip (default: 0)
   config_id?: number;
-  main_status?: number;
+  status?: number;    // MainStatus enum value
   start_date?: string;
   end_date?: string;
 }
 
 export const listFlows = async (params: FlowListParams = {}): Promise<FlowListResponse> => {
-  const response = await api.get('/flows', { params });
+  // Set defaults
+  const queryParams = {
+    limit: params.limit ?? 50,
+    offset: params.offset ?? 0,
+    ...(params.config_id !== undefined && { config_id: params.config_id }),
+    ...(params.status !== undefined && { status: params.status }),
+    ...(params.start_date && { start_date: params.start_date }),
+    ...(params.end_date && { end_date: params.end_date }),
+  };
+  const response = await api.get('/flows', { params: queryParams });
   return response.data;
 };
 
 export const getFlow = async (id: number): Promise<DigiFlowWithResult> => {
   const response = await api.get(`/flows/${id}`);
+  return response.data;
+};
+
+export const getFlowAuditHistory = async (
+  flowId: number
+): Promise<DigiFlowResultFieldAudit[]> => {
+  const response = await api.get(`/flows/${flowId}/audit`);
   return response.data;
 };
 

@@ -1,0 +1,162 @@
+[
+  {
+    "id": "001",
+    "kind": "url",
+    "input": "https://www.reddit.com/r/computervision/comments/1ctf0jh/2024_review_of_ocr_tools_extracting_text_from/"
+  },
+  {
+    "id": "002",
+    "kind": "url",
+    "input": "https://www.reddit.com/r/datacurator/comments/11roy7u/ocr_software_that_works/"
+  },
+  {
+    "id": "003",
+    "kind": "url",
+    "input": "https://www.reddit.com/r/pdf/comments/1cmqgpk/best_ocr_software_for_pdfs/"
+  },
+  {
+    "id": "004",
+    "kind": "url",
+    "input": "https://www.reddit.com/r/ChatGPTPro/comments/1c4s7j1/searching_for_the_perfect_llm_and_ocr_tools_for/"
+  },
+  {
+    "id": "005",
+    "kind": "query",
+    "input": "site:reddit.com \"best scanner app\" OCR pain points"
+  },
+  {
+    "id": "006",
+    "kind": "query",
+    "input": "site:reddit.com CamScanner Adobe Scan privacy ads complaint"
+  },
+  {
+    "id": "007",
+    "kind": "query",
+    "input": "site:zhihu.com OCR 识别 准确率 低 痛点"
+  },
+  {
+    "id": "008",
+    "kind": "query",
+    "input": "site:zhihu.com 扫描 app 推荐 体验 识别"
+  },
+  {
+    "id": "009",
+    "kind": "query",
+    "input": "site:v2ex.com OCR 文字识别 PDF 软件"
+  },
+  {
+    "id": "010",
+    "kind": "query",
+    "input": "site:sspai.com OCR 扫描 识别 体验"
+  },
+  {
+    "id": "011",
+    "kind": "query",
+    "input": "site:xiaohongshu.com 扫描 app 体验 OCR"
+  },
+  {
+    "id": "012",
+    "kind": "url",
+    "input": "https://alternativeto.net/software/camscanner/"
+  },
+  {
+    "id": "013",
+    "kind": "url",
+    "input": "https://alternativeto.net/software/adobe-scan/"
+  },
+  {
+    "id": "014",
+    "kind": "query",
+    "input": "AWS Textract reviews G2 Capterra pain points"
+  },
+  {
+    "id": "015",
+    "kind": "query",
+    "input": "Google Document AI reviews G2 Capterra pain points"
+  },
+  {
+    "id": "016",
+    "kind": "query",
+    "input": "Azure Form Recognizer reviews G2 Capterra pain points"
+  },
+  {
+    "id": "017",
+    "kind": "query",
+    "input": "ABBYY FlexiCapture reviews G2 Capterra pain points"
+  },
+  {
+    "id": "018",
+    "kind": "query",
+    "input": "Kofax OCR reviews G2 Capterra pain points"
+  },
+  {
+    "id": "019",
+    "kind": "query",
+    "input": "Rossum invoice processing reviews G2 Capterra pain points"
+  },
+  {
+    "id": "020",
+    "kind": "query",
+    "input": "Hyperscience IDP reviews G2 Capterra pain points"
+  },
+  {
+    "id": "021",
+    "kind": "query",
+    "input": "Nanonets OCR reviews G2 Capterra pain points"
+  },
+  {
+    "id": "022",
+    "kind": "query",
+    "input": "Docparser reviews G2 Capterra pain points"
+  },
+  {
+    "id": "023",
+    "kind": "query",
+    "input": "Veryfi OCR receipts reviews G2 Capterra pain points"
+  },
+  {
+    "id": "024",
+    "kind": "query",
+    "input": "bill of lading OCR software logistics document processing"
+  },
+  {
+    "id": "025",
+    "kind": "query",
+    "input": "packing list OCR automation logistics documents"
+  },
+  {
+    "id": "026",
+    "kind": "query",
+    "input": "logistics document automation OCR proof of delivery"
+  },
+  {
+    "id": "027",
+    "kind": "query",
+    "input": "AI contract review software review Luminance Kira Lawgeex"
+  },
+  {
+    "id": "028",
+    "kind": "query",
+    "input": "contract analysis software comparison AI extraction"
+  },
+  {
+    "id": "029",
+    "kind": "query",
+    "input": "国内 OCR 文档识别 方案 评价 百度 OCR"
+  },
+  {
+    "id": "030",
+    "kind": "query",
+    "input": "腾讯 OCR 文档识别 评价"
+  },
+  {
+    "id": "031",
+    "kind": "query",
+    "input": "阿里云 OCR 票据识别 评价"
+  },
+  {
+    "id": "032",
+    "kind": "query",
+    "input": "国内 合同审查 AI 评价 合同智能审阅"
+  }
+]

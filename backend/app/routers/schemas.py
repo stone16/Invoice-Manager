@@ -37,6 +37,11 @@ router = APIRouter()
 # Schema endpoints
 
 
+import logging as _logging
+
+_logger = _logging.getLogger(__name__)
+
+
 @router.post("/schemas", response_model=SchemaResponse)
 async def create_schema_endpoint(
     schema_data: SchemaCreate,
@@ -44,14 +49,29 @@ async def create_schema_endpoint(
 ):
     """Create a new schema."""
     try:
-        if schema_data.yaml_schema and not schema_data.schema_json:
+        # Debug: log the incoming data
+        _logger.warning(f"=== POST /schemas ===")
+        _logger.warning(f"slug: {schema_data.slug}")
+        _logger.warning(f"name: {schema_data.name}")
+        _logger.warning(f"yaml_schema: {schema_data.yaml_schema[:100] if schema_data.yaml_schema else None}...")
+        _logger.warning(f"schema_json: {schema_data.schema_json}")
+        
+        # Use explicit 'is not None' checks because empty dict {} is falsy in Python
+        has_yaml = schema_data.yaml_schema is not None and schema_data.yaml_schema.strip()
+        has_json = schema_data.schema_json is not None
+        
+        _logger.warning(f"has_yaml: {has_yaml}, has_json: {has_json}")
+
+        if has_yaml and not has_json:
+            # Only YAML provided - parse it to JSON
             result = await create_schema_from_yaml(
                 db=db,
                 slug=schema_data.slug,
                 name=schema_data.name,
                 yaml_text=schema_data.yaml_schema,
             )
-        elif schema_data.schema_json:
+        elif has_json:
+            # JSON schema provided (may also have YAML for display)
             result = await create_schema(
                 db=db,
                 slug=schema_data.slug,

@@ -1,4 +1,7 @@
+import logging
+
 from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from slowapi.errors import RateLimitExceeded
@@ -6,6 +9,8 @@ from slowapi.errors import RateLimitExceeded
 from app.config import get_settings
 from app.routers import flows, health, invoices, schemas, settings as settings_router
 from app.rate_limit import limiter
+
+logger = logging.getLogger(__name__)
 
 settings = get_settings()
 
@@ -17,6 +22,23 @@ app = FastAPI(
 
 # Add rate limiter to app state
 app.state.limiter = limiter
+
+# Custom validation error handler with detailed logging
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    logger.warning(f"=== Validation Error ===")
+    logger.warning(f"URL: {request.url}")
+    logger.warning(f"Method: {request.method}")
+    try:
+        body = await request.body()
+        logger.warning(f"Body: {body.decode('utf-8')[:1000]}")
+    except Exception:
+        pass
+    logger.warning(f"Errors: {exc.errors()}")
+    return JSONResponse(
+        status_code=400,
+        content={"detail": exc.errors()}
+    )
 
 # Custom rate limit exceeded handler with Chinese message
 @app.exception_handler(RateLimitExceeded)

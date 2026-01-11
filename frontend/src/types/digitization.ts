@@ -88,7 +88,7 @@ export interface DigiFlowSchemaCreate {
   slug: string;
   name: string;
   yaml_schema?: string;
-  schema: Record<string, unknown>;
+  schema?: Record<string, unknown>;
 }
 
 export interface DigiFlowSchemaUpdate {
@@ -312,8 +312,6 @@ export interface ConfigListResponse {
 export interface FlowListResponse {
   items: DigiFlowWithResult[];
   total: number;
-  page: number;
-  page_size: number;
 }
 
 // Status labels for display

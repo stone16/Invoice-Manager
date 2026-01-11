@@ -20,6 +20,7 @@ import {
   FileTextOutlined,
   CodeOutlined,
 } from '@ant-design/icons';
+import { load as loadYaml } from 'js-yaml';
 import { getSchema, createSchema, updateSchema } from '../services/api';
 import type { DigiFlowSchema, DigiFlowSchemaCreate, DigiFlowSchemaUpdate } from '../types/digitization';
 
@@ -65,52 +66,17 @@ function SchemaEditPage() {
   };
 
   const parseYamlToJson = (yaml: string): Record<string, unknown> | null => {
-    // Simple YAML to JSON parser for basic structures
-    // For production, use a proper YAML library
     try {
-      // If it looks like JSON, parse as JSON
       if (yaml.trim().startsWith('{')) {
         return JSON.parse(yaml);
       }
 
-      // Basic YAML parsing (supports simple key: value pairs)
-      const result: Record<string, unknown> = {};
-      const lines = yaml.split('\n');
-      let currentKey = '';
-      let currentObject: Record<string, unknown> = result;
-      const stack: Array<{ obj: Record<string, unknown>; indent: number }> = [{ obj: result, indent: -1 }];
-
-      for (const line of lines) {
-        if (!line.trim() || line.trim().startsWith('#')) continue;
-
-        const indent = line.search(/\S/);
-        const content = line.trim();
-
-        // Pop stack based on indent
-        while (stack.length > 1 && stack[stack.length - 1].indent >= indent) {
-          stack.pop();
-        }
-        currentObject = stack[stack.length - 1].obj;
-
-        if (content.includes(':')) {
-          const [key, ...valueParts] = content.split(':');
-          const value = valueParts.join(':').trim();
-
-          if (value) {
-            // Key-value pair
-            currentObject[key.trim()] = value.replace(/^['"]|['"]$/g, '');
-          } else {
-            // Object key
-            currentKey = key.trim();
-            const newObj: Record<string, unknown> = {};
-            currentObject[currentKey] = newObj;
-            stack.push({ obj: newObj, indent });
-          }
-        }
+      const parsed = loadYaml(yaml);
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        return parsed as Record<string, unknown>;
       }
-
-      return result;
-    } catch (e) {
+      return null;
+    } catch {
       return null;
     }
   };
@@ -128,6 +94,7 @@ function SchemaEditPage() {
     if (parsed) {
       setJsonContent(JSON.stringify(parsed, null, 2));
     } else {
+      setJsonContent('{}');
       setParseError('YAML解析失败，请检查格式');
     }
   };
@@ -145,13 +112,32 @@ function SchemaEditPage() {
 
   const handleSave = async () => {
     try {
+      if (parseError) {
+        message.error(parseError);
+        return;
+      }
+
       const values = await form.validateFields();
 
-      let schemaObj: Record<string, unknown>;
+      let schemaObj: Record<string, unknown> | undefined;
       try {
-        schemaObj = JSON.parse(jsonContent);
+        const parsed = JSON.parse(jsonContent);
+        // Only use the parsed JSON if it has actual content (not empty object)
+        // Otherwise, let the backend parse the YAML
+        if (Object.keys(parsed).length > 0) {
+          schemaObj = parsed;
+        }
       } catch {
-        message.error('Schema JSON格式无效');
+        // JSON parsing failed - if we have YAML, let backend parse it
+        if (!yamlContent?.trim()) {
+          message.error('Schema JSON格式无效');
+          return;
+        }
+      }
+
+      // Must have either valid YAML or valid JSON schema
+      if (!yamlContent?.trim() && !schemaObj) {
+        message.error('请提供YAML或JSON格式的Schema定义');
         return;
       }
 
