@@ -196,3 +196,183 @@ class ConfigListResponse(BaseModel):
 
     items: List[ConfigResponse]
     total: int
+
+
+# Flow API models
+
+
+class FileContentTypeEnum(IntEnum):
+    """File content type enum for API."""
+
+    INVALID = 0
+    PDF = 1
+    EXCEL = 2
+    IMAGE = 3
+
+
+class MainStatusEnum(IntEnum):
+    """Main status enum for API."""
+
+    PENDING = 0
+    IN_PROGRESS = 1
+    COMPLETED = 2
+    FAILED = 3
+
+
+class DataServiceStatusEnum(IntEnum):
+    """Data service status enum for API."""
+
+    NONE = 0
+    IN_PROGRESS = 1
+    COMPLETED = 2
+    FAILED = 3
+
+
+class AuditReasonCodeEnum(IntEnum):
+    """Audit reason code enum for API."""
+
+    INCORRECT = 1
+    MISSING = 2
+    EXTRA = 3
+    FORMAT = 4
+    DATA_SOURCE = 5
+    OTHER = 99
+
+
+class FeedbackSourceEnum(IntEnum):
+    """Feedback source enum for API."""
+
+    UI = 1
+    API = 2
+    AUTO = 3
+
+
+class ContentContextModel(BaseModel):
+    """Content context model."""
+
+    file_path: Optional[str] = None
+    file_name: Optional[str] = None
+    file_type: Optional[str] = None
+    text: Optional[str] = None
+    pages: Optional[int] = None
+
+
+class FlowCreate(BaseModel):
+    """Request to create a new flow."""
+
+    config_id: int = Field(..., description="Configuration ID")
+    config_version: Optional[int] = Field(None, description="Configuration version")
+    content_type: FileContentTypeEnum = Field(..., description="Content type")
+    content_context: ContentContextModel = Field(..., description="Content context")
+
+
+class FlowResponse(BaseModel):
+    """Flow response model."""
+
+    id: int
+    config_id: int
+    config_version: int
+    schema_id: int
+    schema_version: int
+    content_type: int
+    content_context: Dict[str, Any]
+    content_metadata: Optional[Dict[str, Any]] = None
+    langsmith_trace_id: Optional[str] = None
+    main_status: int
+    data_service_status: int
+    schema_validation_status: int
+    schema_validation_result: Optional[Dict[str, Any]] = None
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+
+class FlowResultResponse(BaseModel):
+    """Flow result response model."""
+
+    id: int
+    flow_id: int
+    data: Dict[str, Any]
+    plain_data: Optional[Dict[str, Any]] = None
+    text_blocks: Optional[List[Dict[str, Any]]] = None
+    data_origin: int
+    version: int
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class FlowWithResultResponse(FlowResponse):
+    """Flow with result response model."""
+
+    result: Optional[FlowResultResponse] = None
+    config: Optional[ConfigResponse] = None
+    schema_obj: Optional[SchemaResponse] = Field(None, alias="schema")
+
+    class Config:
+        from_attributes = True
+        populate_by_name = True
+
+
+class FlowListResponse(BaseModel):
+    """Flow list response model."""
+
+    items: List[FlowWithResultResponse]
+    total: int
+
+
+class FieldCorrectionModel(BaseModel):
+    """Field correction model for feedback."""
+
+    field_path: str = Field(..., description="Path to the field")
+    new_value: Any = Field(..., description="New value for the field")
+    reason_code: AuditReasonCodeEnum = Field(
+        AuditReasonCodeEnum.INCORRECT, description="Reason code"
+    )
+    reason_text: Optional[str] = Field(None, description="Reason text")
+
+
+class FeedbackSubmission(BaseModel):
+    """Request to submit feedback corrections."""
+
+    corrections: List[FieldCorrectionModel] = Field(..., description="List of corrections")
+    source: FeedbackSourceEnum = Field(
+        FeedbackSourceEnum.UI, description="Feedback source"
+    )
+
+
+class FeedbackResponse(BaseModel):
+    """Feedback submission response."""
+
+    success: bool
+    message: str
+    result_version: int
+    audits_created: int
+
+
+class AuditRecordResponse(BaseModel):
+    """Audit record response model."""
+
+    id: int
+    flow_id: int
+    result_id: int
+    result_version: int
+    field_path: str
+    old_value: Optional[Any] = None
+    new_value: Optional[Any] = None
+    reason_code: int
+    reason_text: Optional[str] = None
+    audited_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class AuditHistoryResponse(BaseModel):
+    """Audit history response model."""
+
+    items: List[AuditRecordResponse]
+    total: int
