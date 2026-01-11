@@ -186,4 +186,148 @@ export const testLLMConnection = async (): Promise<LLMTestResponse> => {
   return response.data;
 };
 
+// ============================================
+// Digitization Platform APIs
+// ============================================
+
+import type {
+  DigiFlowSchema,
+  DigiFlowSchemaCreate,
+  DigiFlowSchemaUpdate,
+  DigiFlowConfig,
+  DigiFlowConfigCreate,
+  DigiFlowConfigUpdate,
+  DigiFlowCreate,
+  DigiFlowWithResult,
+  FeedbackSubmission,
+  FeedbackResponse,
+  SchemaListResponse,
+  ConfigListResponse,
+  FlowListResponse,
+} from '../types/digitization';
+
+// Schema Management APIs
+
+export interface SchemaListParams {
+  page?: number;
+  page_size?: number;
+  status?: number;
+  slug?: string;
+}
+
+export const listSchemas = async (params: SchemaListParams = {}): Promise<SchemaListResponse> => {
+  const response = await api.get('/schemas', { params });
+  return response.data;
+};
+
+export const getSchema = async (id: number, version?: number): Promise<DigiFlowSchema> => {
+  const params = version ? { version } : {};
+  const response = await api.get(`/schemas/${id}`, { params });
+  return response.data;
+};
+
+export const createSchema = async (data: DigiFlowSchemaCreate): Promise<DigiFlowSchema> => {
+  const response = await api.post('/schemas', data);
+  return response.data;
+};
+
+export const updateSchema = async (id: number, data: DigiFlowSchemaUpdate): Promise<DigiFlowSchema> => {
+  const response = await api.put(`/schemas/${id}`, data);
+  return response.data;
+};
+
+export const deleteSchema = async (id: number): Promise<void> => {
+  await api.delete(`/schemas/${id}`);
+};
+
+// Config Management APIs
+
+export interface ConfigListParams {
+  page?: number;
+  page_size?: number;
+  status?: number;
+  schema_id?: number;
+  domain?: string;
+}
+
+export const listConfigs = async (params: ConfigListParams = {}): Promise<ConfigListResponse> => {
+  const response = await api.get('/configs', { params });
+  return response.data;
+};
+
+export const getConfig = async (id: number, version?: number): Promise<DigiFlowConfig> => {
+  const params = version ? { version } : {};
+  const response = await api.get(`/configs/${id}`, { params });
+  return response.data;
+};
+
+export const createConfig = async (data: DigiFlowConfigCreate): Promise<DigiFlowConfig> => {
+  const response = await api.post('/configs', data);
+  return response.data;
+};
+
+export const updateConfig = async (id: number, data: DigiFlowConfigUpdate): Promise<DigiFlowConfig> => {
+  const response = await api.put(`/configs/${id}`, data);
+  return response.data;
+};
+
+// Flow Management APIs
+
+export interface FlowListParams {
+  page?: number;
+  page_size?: number;
+  config_id?: number;
+  main_status?: number;
+  start_date?: string;
+  end_date?: string;
+}
+
+export const listFlows = async (params: FlowListParams = {}): Promise<FlowListResponse> => {
+  const response = await api.get('/flows', { params });
+  return response.data;
+};
+
+export const getFlow = async (id: number): Promise<DigiFlowWithResult> => {
+  const response = await api.get(`/flows/${id}`);
+  return response.data;
+};
+
+export const createFlow = async (data: DigiFlowCreate): Promise<DigiFlowWithResult> => {
+  const response = await api.post('/flows', data);
+  return response.data;
+};
+
+export const uploadFlow = async (
+  configId: number,
+  files: File[]
+): Promise<DigiFlowWithResult[]> => {
+  const formData = new FormData();
+  formData.append('config_id', configId.toString());
+  files.forEach((file) => {
+    formData.append('files', file);
+  });
+
+  const response = await api.post('/flows/upload', formData, {
+    headers: {
+      'Content-Type': 'multipart/form-data',
+    },
+  });
+  return response.data;
+};
+
+// Feedback APIs
+
+export const submitFeedback = async (
+  flowId: number,
+  feedback: FeedbackSubmission
+): Promise<FeedbackResponse> => {
+  const response = await api.post(`/flows/${flowId}/feedback`, feedback);
+  return response.data;
+};
+
+// LangSmith trace URL helper
+export const getLangSmithTraceUrl = (traceId: string): string => {
+  return `https://smith.langchain.com/public/${traceId}`;
+};
+
 export default api;
