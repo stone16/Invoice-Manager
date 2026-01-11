@@ -39,7 +39,7 @@ const KanbanBoardPage: React.FC = () => {
 
   const loadConfigs = async () => {
     try {
-      const response = await listConfigs({ page_size: 100, status: 1 });
+      const response = await listConfigs({ status: 1 });
       setConfigs(response.items);
     } catch (error) {
       console.error('Failed to load configs:', error);
@@ -115,8 +115,11 @@ const KanbanBoardPage: React.FC = () => {
 
     setUploading(true);
     try {
-      await uploadFlow(selectedConfigId, [file as unknown as File]);
+      const response = await uploadFlow(selectedConfigId, [file as unknown as File]);
       message.success('上传成功');
+      if (response.skipped_files.length > 0) {
+        message.warning(`已跳过 ${response.skipped_files.length} 个不支持的文件`);
+      }
       loadDocuments();
     } catch (error) {
       console.error('Upload failed:', error);

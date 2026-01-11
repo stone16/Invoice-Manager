@@ -1,11 +1,13 @@
 """API router for digitization flow management."""
 
+import logging
 import uuid
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from sqlalchemy import desc, func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
@@ -30,10 +32,12 @@ from app.schemas.digi_flow import (
     FlowResponse,
     FlowResultResponse,
     FlowWithResultResponse,
+    FlowUploadResponse,
     SchemaResponse,
 )
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 @router.get("/flows", response_model=FlowListResponse)
@@ -45,36 +49,51 @@ async def list_flows(
     db: AsyncSession = Depends(get_db),
 ):
     """List digitization flows with optional filtering."""
-    # Build query
-    query = select(DigiFlow).order_by(desc(DigiFlow.created_at))
-
+    filters = []
     if config_id is not None:
-        query = query.where(DigiFlow.config_id == config_id)
+        filters.append(DigiFlow.config_id == config_id)
     if status is not None:
-        query = query.where(DigiFlow.main_status == status)
+        filters.append(DigiFlow.main_status == status)
 
-    # Count total
-    count_query = select(func.count()).select_from(query.subquery())
+    base_query = select(DigiFlow).order_by(desc(DigiFlow.created_at))
+    if filters:
+        base_query = base_query.where(*filters)
+
+    # Count total flows
+    count_query = select(func.count()).select_from(base_query.subquery())
     total_result = await db.execute(count_query)
     total = total_result.scalar() or 0
 
-    # Apply pagination
+    # Subquery for latest result per flow
+    latest_result_subq = (
+        select(
+            DigiFlowResult.flow_id,
+            func.max(DigiFlowResult.version).label("max_version"),
+        )
+        .group_by(DigiFlowResult.flow_id)
+        .subquery()
+    )
+
+    query = (
+        select(DigiFlow, DigiFlowResult)
+        .outerjoin(latest_result_subq, DigiFlow.id == latest_result_subq.c.flow_id)
+        .outerjoin(
+            DigiFlowResult,
+            (DigiFlowResult.flow_id == latest_result_subq.c.flow_id)
+            & (DigiFlowResult.version == latest_result_subq.c.max_version),
+        )
+        .order_by(desc(DigiFlow.created_at))
+    )
+    if filters:
+        query = query.where(*filters)
+
     query = query.offset(offset).limit(limit)
     result = await db.execute(query)
-    flows = result.scalars().all()
+    rows = result.all()
 
     # Build response with results
     items = []
-    for flow in flows:
-        # Get latest result for this flow
-        result_query = (
-            select(DigiFlowResult)
-            .where(DigiFlowResult.flow_id == flow.id)
-            .order_by(desc(DigiFlowResult.version))
-            .limit(1)
-        )
-        result_result = await db.execute(result_query)
-        flow_result = result_result.scalar_one_or_none()
+    for flow, flow_result in rows:
 
         flow_response = FlowWithResultResponse(
             id=flow.id,
@@ -130,6 +149,7 @@ async def get_flow(
         .where(DigiFlowResult.flow_id == flow_id)
         .order_by(desc(DigiFlowResult.version))
         .limit(1)
+        .with_for_update()
     )
     result_result = await db.execute(result_query)
     flow_result = result_result.scalar_one_or_none()
@@ -199,6 +219,7 @@ async def get_flow_audit_history(
     flow_id: int,
     field_path: Optional[str] = Query(None, description="Filter by field path"),
     limit: int = Query(100, le=500, description="Maximum results"),
+    offset: int = Query(0, ge=0, description="Offset for pagination"),
     db: AsyncSession = Depends(get_db),
 ):
     """Get audit history for a flow."""
@@ -218,7 +239,11 @@ async def get_flow_audit_history(
     if field_path:
         query = query.where(DigiFlowResultFieldAudit.field_path == field_path)
 
-    query = query.limit(limit)
+    count_query = select(func.count()).select_from(query.subquery())
+    total_result = await db.execute(count_query)
+    total = total_result.scalar() or 0
+
+    query = query.offset(offset).limit(limit)
 
     result = await db.execute(query)
     audits = result.scalars().all()
@@ -239,7 +264,7 @@ async def get_flow_audit_history(
         for audit in audits
     ]
 
-    return AuditHistoryResponse(items=items, total=len(items))
+    return AuditHistoryResponse(items=items, total=total)
 
 
 def _detect_content_type(file_name: str) -> FileContentType:
@@ -271,10 +296,13 @@ def _set_nested_value(data: Dict[str, Any], path: str, value: Any) -> None:
     keys = path.split(".")
     current = data
     for key in keys[:-1]:
-        if key not in current:
+        if not isinstance(current, dict):
+            return
+        if key not in current or not isinstance(current[key], dict):
             current[key] = {}
         current = current[key]
-    current[keys[-1]] = value
+    if isinstance(current, dict):
+        current[keys[-1]] = value
 
 
 @router.post("/flows", response_model=FlowWithResultResponse)
@@ -401,6 +429,7 @@ async def create_flow(
         db.add(flow_result)
 
     except Exception as e:
+        logger.exception("Flow creation failed for config_id=%s", config_id)
         flow.main_status = MainStatus.FAILED.value
         flow.content_metadata = {"error": str(e)}
 
@@ -437,7 +466,7 @@ async def create_flow(
     )
 
 
-@router.post("/flows/upload", response_model=List[FlowWithResultResponse])
+@router.post("/flows/upload", response_model=FlowUploadResponse)
 async def upload_flows(
     config_id: int = Form(..., description="Configuration ID to use"),
     files: List[UploadFile] = File(..., description="Files to process"),
@@ -495,6 +524,7 @@ async def upload_flows(
     executor = DigitizationExecutor(llm_client=llm_client, rag_service=rag_service)
 
     results = []
+    skipped_files = []
 
     for idx, file in enumerate(files):
         # Read file content
@@ -505,7 +535,8 @@ async def upload_flows(
         # Detect content type
         content_type = _detect_content_type(file_name)
         if content_type == FileContentType.INVALID:
-            continue  # Skip unsupported files
+            skipped_files.append({"file_name": file_name, "reason": "Unsupported file type"})
+            continue
 
         # Create flow record
         flow = DigiFlow(
@@ -600,6 +631,7 @@ async def upload_flows(
             db.add(flow_result)
 
         except Exception as e:
+            logger.exception("File processing failed for %s", file_name)
             flow.main_status = MainStatus.FAILED.value
             flow.content_metadata = {"error": str(e)}
             flow_result = None
@@ -636,8 +668,11 @@ async def upload_flows(
         )
         results.append(response)
 
+    if skipped_files:
+        logger.warning("Skipped %d unsupported files", len(skipped_files))
+
     await db.commit()
-    return results
+    return FlowUploadResponse(items=results, skipped_files=skipped_files)
 
 
 @router.post("/flows/{flow_id}/feedback", response_model=FeedbackResponse)
@@ -712,7 +747,14 @@ async def submit_feedback(
     # Update flow timestamp
     flow.updated_at = datetime.utcnow()
 
-    await db.flush()
+    try:
+        await db.flush()
+    except IntegrityError as exc:
+        await db.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail="Concurrent modification detected. Please retry.",
+        ) from exc
 
     # Store to RAG if requested
     if store_to_rag:
@@ -741,7 +783,11 @@ async def submit_feedback(
             )
         except Exception:
             # Don't fail the feedback submission if RAG storage fails
-            pass
+            logger.warning(
+                "Failed to store training data for flow_id=%s",
+                flow_id,
+                exc_info=True,
+            )
 
     await db.commit()
 

@@ -130,6 +130,10 @@ function FlowFeedbackPage() {
 
     setSubmitting(true);
     try {
+      if (!id) {
+        message.error('Flow ID不存在');
+        return;
+      }
       const feedback: FeedbackSubmission = {
         corrections: corrections.map(c => ({
           field_path: c.field_path,
@@ -140,7 +144,7 @@ function FlowFeedbackPage() {
         source: FeedbackSource.UI,
       };
 
-      const response = await submitFeedback(parseInt(id!), feedback);
+      const response = await submitFeedback(parseInt(id, 10), feedback);
 
       if (response.success) {
         message.success(`修正提交成功！创建了 ${response.audits_created} 条审计记录，结果版本更新为 v${response.result_version}`);

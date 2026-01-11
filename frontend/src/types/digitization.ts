@@ -259,6 +259,11 @@ export interface DigiFlowResultFieldAudit {
   audited_by?: Record<string, unknown>;
 }
 
+export interface AuditHistoryResponse {
+  items: DigiFlowResultFieldAudit[];
+  total: number;
+}
+
 // Feedback submission
 export interface FeedbackSubmission {
   corrections: Array<{
@@ -298,20 +303,26 @@ export interface RagTrainingDataVector {
 export interface SchemaListResponse {
   items: DigiFlowSchema[];
   total: number;
-  page: number;
-  page_size: number;
 }
 
 export interface ConfigListResponse {
   items: DigiFlowConfig[];
   total: number;
-  page: number;
-  page_size: number;
 }
 
 export interface FlowListResponse {
   items: DigiFlowWithResult[];
   total: number;
+}
+
+export interface SkippedFile {
+  file_name: string;
+  reason: string;
+}
+
+export interface FlowUploadResponse {
+  items: DigiFlowWithResult[];
+  skipped_files: SkippedFile[];
 }
 
 // Status labels for display

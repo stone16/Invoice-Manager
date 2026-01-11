@@ -50,7 +50,7 @@ function FlowListPage() {
 
   const fetchConfigs = async () => {
     try {
-      const response = await listConfigs({ page_size: 100 });
+      const response = await listConfigs();
       setConfigs(response.items);
     } catch (error) {
       console.error('获取Config列表失败', error);
@@ -61,14 +61,14 @@ function FlowListPage() {
     setLoading(true);
     try {
       const params: Record<string, unknown> = {
-        page,
-        page_size: pageSize,
+        limit: pageSize,
+        offset: (page - 1) * pageSize,
       };
       if (filterConfigId) {
         params.config_id = filterConfigId;
       }
       if (filterStatus !== undefined) {
-        params.main_status = filterStatus;
+        params.status = filterStatus;
       }
       if (dateRange) {
         params.start_date = dateRange[0].format('YYYY-MM-DD');

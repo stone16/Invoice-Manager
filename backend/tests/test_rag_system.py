@@ -52,6 +52,7 @@ class TestEmbeddingGeneration:
     def test_weighted_text_truncation_to_8192_tokens(self):
         """Test that total text is truncated to 8192 tokens."""
         from app.services.rag.embedding_service import prepare_weighted_text
+        from app.services.rag.embedding_service import _get_tiktoken_encoder
 
         # Create very long content
         long_content = "word " * 10000  # Way more than 8192 tokens
@@ -59,9 +60,13 @@ class TestEmbeddingGeneration:
 
         weighted_text, _ = prepare_weighted_text(pages)
 
-        # Should be truncated to approximately 8192 tokens
-        # Using rough estimate of 4 chars per token
-        assert len(weighted_text.split()) <= 8192
+        encoder = _get_tiktoken_encoder()
+        if encoder:
+            tokens = encoder.encode(weighted_text)
+            assert len(tokens) <= 8192
+        else:
+            # Fallback to rough estimate if tiktoken unavailable
+            assert len(weighted_text.split()) <= 8192
 
     def test_line_deduplication_removes_duplicates(self):
         """Test that duplicate lines (>95% similar) are removed."""
@@ -131,6 +136,9 @@ class TestPgvectorIntegration:
 
         mock_db.add.assert_called_once()
         mock_db.flush.assert_called_once()
+        assert result is not None
+        assert result.flow_id == 1
+        assert result.config_id == 1
 
     @pytest.mark.asyncio
     async def test_similarity_search_returns_results(self):
@@ -441,15 +449,28 @@ class TestRAGIntegration:
     async def test_full_rag_pipeline_with_match(self):
         """Test full RAG flow when similar document found."""
         from app.services.rag.rag_service import RAGService
+        from app.services.rag.vector_repository import VectorSearchResult
+        from app.models.digi_flow import RagTrainingDataVector
 
         mock_repo = AsyncMock()
         mock_embedding_service = MagicMock()
 
         # Mock finding a similar document
         mock_repo.similarity_search.return_value = [
-            MagicMock(
-                reference_input={"plain_text": "test", "text_blocks": []},
-                reference_output={"invoice_number": {"value": "INV-001"}},
+            VectorSearchResult(
+                vector=RagTrainingDataVector(
+                    flow_id=1,
+                    config_id=1,
+                    schema_id=1,
+                    schema_version=1,
+                    result_id=1,
+                    result_version=1,
+                    source_content_context={},
+                    source_content_context_idx=0,
+                    reference_input={"plain_text": "test", "text_blocks": []},
+                    reference_output={"invoice_number": {"value": "INV-001"}},
+                    embedding=[0.1] * 1536,
+                ),
                 distance=0.1,
             )
         ]

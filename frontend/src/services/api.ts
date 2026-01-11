@@ -199,19 +199,18 @@ import type {
   DigiFlowConfigUpdate,
   DigiFlowCreate,
   DigiFlowWithResult,
-  DigiFlowResultFieldAudit,
+  AuditHistoryResponse,
   FeedbackSubmission,
   FeedbackResponse,
   SchemaListResponse,
   ConfigListResponse,
   FlowListResponse,
+  FlowUploadResponse,
 } from '../types/digitization';
 
 // Schema Management APIs
 
 export interface SchemaListParams {
-  page?: number;
-  page_size?: number;
   status?: number;
   slug?: string;
 }
@@ -244,8 +243,6 @@ export const deleteSchema = async (id: number): Promise<void> => {
 // Config Management APIs
 
 export interface ConfigListParams {
-  page?: number;
-  page_size?: number;
   status?: number;
   schema_id?: number;
   domain?: string;
@@ -304,7 +301,7 @@ export const getFlow = async (id: number): Promise<DigiFlowWithResult> => {
 
 export const getFlowAuditHistory = async (
   flowId: number
-): Promise<DigiFlowResultFieldAudit[]> => {
+): Promise<AuditHistoryResponse> => {
   const response = await api.get(`/flows/${flowId}/audit`);
   return response.data;
 };
@@ -317,7 +314,7 @@ export const createFlow = async (data: DigiFlowCreate): Promise<DigiFlowWithResu
 export const uploadFlow = async (
   configId: number,
   files: File[]
-): Promise<DigiFlowWithResult[]> => {
+): Promise<FlowUploadResponse> => {
   const formData = new FormData();
   formData.append('config_id', configId.toString());
   files.forEach((file) => {

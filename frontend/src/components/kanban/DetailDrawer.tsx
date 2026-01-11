@@ -58,7 +58,7 @@ export const DetailDrawer: React.FC<DetailDrawerProps> = ({
     setLoadingHistory(true);
     try {
       const history = await getFlowAuditHistory(flowId);
-      setAuditHistory(history);
+      setAuditHistory(history.items);
     } catch (error) {
       console.error('Failed to load audit history:', error);
       message.error('加载审核历史失败');

@@ -74,7 +74,7 @@ function ConfigEditPage() {
 
   const fetchSchemas = async () => {
     try {
-      const response = await listSchemas({ page_size: 100 });
+      const response = await listSchemas();
       setSchemas(response.items);
     } catch (error) {
       console.error('获取Schema列表失败', error);

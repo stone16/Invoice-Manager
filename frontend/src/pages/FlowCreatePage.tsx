@@ -20,7 +20,7 @@ import {
 } from '@ant-design/icons';
 import type { UploadFile } from 'antd/es/upload/interface';
 import { listConfigs, uploadFlow } from '../services/api';
-import type { DigiFlowConfig, DigiFlowWithResult } from '../types/digitization';
+import type { DigiFlowConfig, DigiFlowWithResult, SkippedFile } from '../types/digitization';
 
 const { Text } = Typography;
 const { Dragger } = Upload;
@@ -33,6 +33,7 @@ function FlowCreatePage() {
   const [uploading, setUploading] = useState(false);
   const [currentStep, setCurrentStep] = useState(0);
   const [createdFlows, setCreatedFlows] = useState<DigiFlowWithResult[]>([]);
+  const [skippedFiles, setSkippedFiles] = useState<SkippedFile[]>([]);
 
   useEffect(() => {
     fetchConfigs();
@@ -40,7 +41,7 @@ function FlowCreatePage() {
 
   const fetchConfigs = async () => {
     try {
-      const response = await listConfigs({ page_size: 100, status: 1 }); // Active only
+      const response = await listConfigs({ status: 1 }); // Active only
       setConfigs(response.items);
     } catch (error) {
       message.error('获取Config列表失败');
@@ -62,10 +63,14 @@ function FlowCreatePage() {
     setUploading(true);
     try {
       const files = fileList.map(f => f.originFileObj as File);
-      const flows = await uploadFlow(selectedConfigId, files);
-      setCreatedFlows(flows);
+      const response = await uploadFlow(selectedConfigId, files);
+      setCreatedFlows(response.items);
+      setSkippedFiles(response.skipped_files);
       setCurrentStep(2);
-      message.success(`成功创建 ${flows.length} 个Flow`);
+      message.success(`成功创建 ${response.items.length} 个Flow`);
+      if (response.skipped_files.length > 0) {
+        message.warning(`已跳过 ${response.skipped_files.length} 个不支持的文件`);
+      }
     } catch (error) {
       message.error('上传失败');
       console.error(error);
@@ -215,6 +220,7 @@ function FlowCreatePage() {
                   setCurrentStep(0);
                   setFileList([]);
                   setCreatedFlows([]);
+                  setSkippedFiles([]);
                 }}
               >
                 继续上传
@@ -227,9 +233,25 @@ function FlowCreatePage() {
                 <ul>
                   {createdFlows.map(flow => (
                     <li key={flow.id}>
-                      <a onClick={() => navigate(`/flows/${flow.id}`)}>
+                      <Button
+                        type="link"
+                        onClick={() => navigate(`/flows/${flow.id}`)}
+                        style={{ padding: 0, height: 'auto' }}
+                      >
                         Flow #{flow.id} - {flow.content_context?.file_name}
-                      </a>
+                      </Button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {skippedFiles.length > 0 && (
+              <div style={{ textAlign: 'left', marginTop: 16 }}>
+                <Text type="secondary">已跳过的文件：</Text>
+                <ul>
+                  {skippedFiles.map(file => (
+                    <li key={file.file_name}>
+                      {file.file_name} - {file.reason}
                     </li>
                   ))}
                 </ul>

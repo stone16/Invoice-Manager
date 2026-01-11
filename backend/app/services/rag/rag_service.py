@@ -18,8 +18,6 @@ DEFAULT_RAG_CONFIG: Dict[str, Any] = {
     "enabled": True,
     "distance_threshold": 0.3,
     "max_examples": 1,
-    "training_data_source_fields": ["plain_text", "text_blocks"],
-    "training_data_reference_fields": ["output_values", "data_source_info"],
 }
 MAX_REFERENCE_INPUT_CHARS = 5000
 
@@ -132,12 +130,8 @@ class RAGService:
         # Build few-shot examples from retrieved documents
         examples = []
         for doc in similar_docs:
-            if isinstance(doc, VectorSearchResult):
-                vector = doc.vector
-                distance = doc.distance
-            else:
-                vector = doc
-                distance = getattr(doc, "distance", 0.0)
+            vector = doc.vector
+            distance = doc.distance
             example_data = {
                 "reference_input": vector.reference_input,
                 "reference_output": vector.reference_output,

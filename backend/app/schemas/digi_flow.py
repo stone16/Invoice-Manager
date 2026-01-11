@@ -4,7 +4,7 @@ from datetime import datetime
 from enum import IntEnum
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class ConfigStatusEnum(IntEnum):
@@ -35,6 +35,12 @@ class SchemaCreate(BaseModel):
     )
     yaml_schema: Optional[str] = Field(None, description="YAML schema definition")
 
+    @model_validator(mode="after")
+    def check_schema_provided(self) -> "SchemaCreate":
+        if self.schema_json is None and self.yaml_schema is None:
+            raise ValueError("Either schema_json or yaml_schema must be provided")
+        return self
+
     class Config:
         populate_by_name = True
 
@@ -50,6 +56,12 @@ class SchemaUpdate(BaseModel):
     create_new_version: bool = Field(
         True, description="Whether to create a new version"
     )
+
+    @model_validator(mode="after")
+    def check_schema_provided(self) -> "SchemaUpdate":
+        if self.schema_json is None and self.yaml_schema is None:
+            raise ValueError("Either schema_json or yaml_schema must be provided")
+        return self
 
     class Config:
         populate_by_name = True
@@ -322,6 +334,20 @@ class FlowListResponse(BaseModel):
 
     items: List[FlowWithResultResponse]
     total: int
+
+
+class SkippedFileResponse(BaseModel):
+    """Skipped file response model."""
+
+    file_name: str
+    reason: str
+
+
+class FlowUploadResponse(BaseModel):
+    """Flow upload response model."""
+
+    items: List[FlowWithResultResponse]
+    skipped_files: List[SkippedFileResponse] = Field(default_factory=list)
 
 
 class FieldCorrectionModel(BaseModel):

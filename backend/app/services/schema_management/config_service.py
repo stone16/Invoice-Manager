@@ -81,8 +81,6 @@ def _default_workflow_config() -> Dict[str, Any]:
             "enabled": True,
             "distance_threshold": 0.3,
             "max_examples": 3,
-            "training_data_source_fields": [],
-            "training_data_reference_fields": [],
         },
         "model": {
             "provider": "openai",

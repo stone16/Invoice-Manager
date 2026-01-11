@@ -36,7 +36,7 @@ function ConfigListPage() {
 
   const fetchSchemas = async () => {
     try {
-      const response = await listSchemas({ page_size: 100 });
+      const response = await listSchemas();
       setSchemas(response.items);
     } catch (error) {
       console.error('获取Schema列表失败', error);
@@ -46,10 +46,7 @@ function ConfigListPage() {
   const fetchConfigs = async () => {
     setLoading(true);
     try {
-      const params: Record<string, unknown> = {
-        page,
-        page_size: pageSize,
-      };
+      const params: Record<string, unknown> = {};
       if (filterSchemaId) {
         params.schema_id = filterSchemaId;
       }

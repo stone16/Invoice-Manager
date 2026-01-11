@@ -36,10 +36,7 @@ function SchemaListPage() {
   const fetchSchemas = async () => {
     setLoading(true);
     try {
-      const params: Record<string, unknown> = {
-        page,
-        page_size: pageSize,
-      };
+      const params: Record<string, unknown> = {};
       if (searchSlug) {
         params.slug = searchSlug;
       }

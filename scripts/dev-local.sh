@@ -130,6 +130,10 @@ start_backend() {
 
     log_info "Starting backend server..."
     cd "$BACKEND_DIR"
+    if [ ! -d "$VENV_DIR" ]; then
+        log_warn "Backend venv not found. Running setup..."
+        setup_backend
+    fi
     source "$VENV_DIR/bin/activate"
 
     # Run database migrations if needed
@@ -249,12 +253,20 @@ show_help() {
     echo "  db       - Start database only"
     echo "  backend  - Start backend only (assumes db is running)"
     echo "  frontend - Start frontend only"
+    echo "  logs     - Show database logs"
     echo "  help     - Show this help message"
     echo ""
     echo "Quick Start:"
     echo "  1. ./scripts/dev-local.sh setup"
     echo "  2. ./scripts/dev-local.sh start"
     echo ""
+}
+
+# Show database logs
+show_logs() {
+    log_info "Showing database logs..."
+    cd "$PROJECT_ROOT"
+    docker-compose -f docker-compose.dev.yml logs -f
 }
 
 # Main
@@ -276,6 +288,9 @@ case "${1:-help}" in
         ;;
     frontend)
         start_frontend
+        ;;
+    logs)
+        show_logs
         ;;
     help|--help|-h)
         show_help

@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+from contextlib import asynccontextmanager
 from typing import Any, Dict, List, Optional
+
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.services.feedback.audit_service import AuditService
 from app.services.feedback.confirmation_service import ConfirmationService
@@ -19,6 +22,7 @@ class FeedbackOrchestrator:
         audit_service: AuditService,
         training_service: TrainingDataService,
         confirmation_service: ConfirmationService,
+        db: Optional[AsyncSession] = None,
     ):
         """Initialize feedback orchestrator.
 
@@ -32,6 +36,17 @@ class FeedbackOrchestrator:
         self.audit_service = audit_service
         self.training_service = training_service
         self.confirmation_service = confirmation_service
+        self.db = db
+        if self.db is None:
+            for candidate in (
+                getattr(correction_service, "db", None),
+                getattr(audit_service, "db", None),
+                getattr(training_service, "db", None),
+                getattr(confirmation_service, "db", None),
+            ):
+                if isinstance(candidate, AsyncSession):
+                    self.db = candidate
+                    break
 
     def _validate_correction(self, correction: Dict[str, Any]) -> None:
         """Validate correction payload before processing."""
@@ -39,6 +54,14 @@ class FeedbackOrchestrator:
         missing = [field for field in required_fields if field not in correction]
         if missing:
             raise ValueError(f"Correction missing required fields: {missing}")
+
+    @asynccontextmanager
+    async def _maybe_transaction(self):
+        if self.db is None:
+            yield
+            return
+        async with self.db.begin():
+            yield
 
     async def process_correction_and_confirm(
         self,
@@ -67,32 +90,32 @@ class FeedbackOrchestrator:
             Workflow result with confirmation and training status.
         """
         self._validate_correction(correction)
-        # NOTE: If strict consistency is required, call this within a DB transaction.
-        # Step 1: Submit correction
-        correction_result = await self.correction_service.submit_correction(
-            flow_id=flow_id,
-            result_id=result_id,
-            correction=correction,
-        )
+        async with self._maybe_transaction():
+            # Step 1: Submit correction
+            correction_result = await self.correction_service.submit_correction(
+                flow_id=flow_id,
+                result_id=result_id,
+                correction=correction,
+            )
 
-        # Step 2: Log audit record
-        await self.audit_service.log_field_change(
-            flow_id=flow_id,
-            field_path=correction["field_path"],
-            old_value=correction["old_value"],
-            new_value=correction["new_value"],
-            old_block_id=correction.get("old_block_id"),
-            new_block_id=correction.get("block_id"),
-            result_version=correction_result["version"],
-        )
+            # Step 2: Log audit record
+            await self.audit_service.log_field_change(
+                flow_id=flow_id,
+                field_path=correction["field_path"],
+                old_value=correction["old_value"],
+                new_value=correction["new_value"],
+                old_block_id=correction.get("old_block_id"),
+                new_block_id=correction.get("block_id"),
+                result_version=correction_result["version"],
+            )
 
-        # Step 3: Confirm the corrected result
-        confirmed = await self.confirmation_service.confirm_result(
-            flow_id=flow_id,
-            result_id=result_id,
-            confirmed_by="USER",
-            notes="Manual correction applied",
-        )
+            # Step 3: Confirm the corrected result
+            confirmed = await self.confirmation_service.confirm_result(
+                flow_id=flow_id,
+                result_id=result_id,
+                confirmed_by="USER",
+                notes="Manual correction applied",
+            )
 
         # Step 4: Generate training data
         training_data = None
@@ -140,33 +163,37 @@ class FeedbackOrchestrator:
             raise ValueError("At least one correction is required")
         for correction in corrections:
             self._validate_correction(correction)
-        # NOTE: If strict consistency is required, call this within a DB transaction.
-        # Step 1: Submit bulk corrections (single version)
-        correction_result = await self.correction_service.submit_bulk_corrections(
-            flow_id=flow_id,
-            result_id=result_id,
-            corrections=corrections,
-        )
+        field_paths = [correction["field_path"] for correction in corrections]
+        if len(set(field_paths)) != len(field_paths):
+            raise ValueError("Duplicate field_path values detected in corrections")
 
-        # Step 2: Log audit records for each correction
-        for correction in corrections:
-            await self.audit_service.log_field_change(
+        async with self._maybe_transaction():
+            # Step 1: Submit bulk corrections (single version)
+            correction_result = await self.correction_service.submit_bulk_corrections(
                 flow_id=flow_id,
-                field_path=correction["field_path"],
-                old_value=correction["old_value"],
-                new_value=correction["new_value"],
-                old_block_id=correction.get("old_block_id"),
-                new_block_id=correction.get("block_id"),
-                result_version=correction_result["version"],
+                result_id=result_id,
+                corrections=corrections,
             )
 
-        # Step 3: Confirm
-        confirmed = await self.confirmation_service.confirm_result(
-            flow_id=flow_id,
-            result_id=result_id,
-            confirmed_by="USER",
-            notes=f"Bulk correction: {len(corrections)} fields",
-        )
+            # Step 2: Log audit records for each correction
+            for correction in corrections:
+                await self.audit_service.log_field_change(
+                    flow_id=flow_id,
+                    field_path=correction["field_path"],
+                    old_value=correction["old_value"],
+                    new_value=correction["new_value"],
+                    old_block_id=correction.get("old_block_id"),
+                    new_block_id=correction.get("block_id"),
+                    result_version=correction_result["version"],
+                )
+
+            # Step 3: Confirm
+            confirmed = await self.confirmation_service.confirm_result(
+                flow_id=flow_id,
+                result_id=result_id,
+                confirmed_by="USER",
+                notes=f"Bulk correction: {len(corrections)} fields",
+            )
 
         # Step 4: Generate training data
         training_data = None

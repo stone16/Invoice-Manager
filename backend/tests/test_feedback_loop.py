@@ -22,6 +22,14 @@ class TestCorrectionProcessing:
 
         mock_db = AsyncMock()
         service = CorrectionService(db=mock_db)
+        service._get_current_result = AsyncMock(
+            return_value={
+                "flow_id": 1,
+                "result_id": 1,
+                "version": 1,
+                "output_values": {"invoice_number": {"value": "INV-001"}},
+            }
+        )
 
         correction = {
             "field_path": "invoice_number.value",
@@ -47,6 +55,17 @@ class TestCorrectionProcessing:
 
         mock_db = AsyncMock()
         service = CorrectionService(db=mock_db)
+        service._get_current_result = AsyncMock(
+            return_value={
+                "flow_id": 1,
+                "result_id": 1,
+                "version": 1,
+                "output_values": {
+                    "invoice_number": {"value": "INV-001"},
+                    "total_amount": {"value": 100.00},
+                },
+            }
+        )
 
         corrections = [
             {
@@ -80,6 +99,14 @@ class TestCorrectionProcessing:
 
         mock_db = AsyncMock()
         service = CorrectionService(db=mock_db)
+        service._get_current_result = AsyncMock(
+            return_value={
+                "flow_id": 1,
+                "result_id": 1,
+                "version": 1,
+                "output_values": {"invoice_number": {"value": "INV-001"}},
+            }
+        )
 
         correction = {
             "field_path": "invoice_number.value",

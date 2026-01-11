@@ -11,6 +11,7 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
+    UniqueConstraint,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.schema import Identity, PrimaryKeyConstraint
@@ -182,6 +183,13 @@ class DigiFlowResult(Base):
     """Versioned extraction results for a digitization flow."""
 
     __tablename__ = "digi_flow_result"
+    __table_args__ = (
+        UniqueConstraint(
+            "flow_id",
+            "version",
+            name="uq_digi_flow_result_flow_id_version",
+        ),
+    )
 
     id = Column(BigInteger, Identity(), primary_key=True)
     flow_id = Column(BigInteger, nullable=False)

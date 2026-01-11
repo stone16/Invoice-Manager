@@ -40,6 +40,10 @@ async def create_schema(
     Raises:
         ValueError: If schema is invalid
     """
+    existing = await get_schema_by_slug(db, slug)
+    if existing:
+        raise ValueError(f"Schema with slug '{slug}' already exists")
+
     validate_json_schema(schema)
 
     new_schema = DigiFlowSchema(
@@ -107,7 +111,7 @@ async def get_schema(
     if version is not None:
         query = query.where(DigiFlowSchema.version == version)
     else:
-        query = query.order_by(DigiFlowSchema.version.desc())
+        query = query.order_by(DigiFlowSchema.id.desc(), DigiFlowSchema.version.desc())
     result = await db.execute(query)
     return result.scalar_one_or_none() if version is not None else result.scalars().first()
 
@@ -212,9 +216,9 @@ async def update_schema(
         new_schema = DigiFlowSchema(
             id=schema_id,
             slug=existing.slug,
-            name=name or existing.name,
-            schema=schema or existing.schema,
-            yaml_schema=yaml_schema or existing.yaml_schema,
+            name=name if name is not None else existing.name,
+            schema=schema if schema is not None else existing.schema,
+            yaml_schema=yaml_schema if yaml_schema is not None else existing.yaml_schema,
             version=new_version,
             status=ConfigStatus.ACTIVE,
             created_at=existing.created_at,

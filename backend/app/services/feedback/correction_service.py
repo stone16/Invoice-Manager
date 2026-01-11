@@ -173,12 +173,28 @@ class CorrectionService:
         """
         result = deepcopy(output_values)
         field_path = correction["field_path"]
+        old_value = correction.get("old_value")
         new_value = correction["new_value"]
         new_block_id = correction.get("block_id")
 
         # Parse field path and update value
         parts = field_path.split(".")
         current = result
+
+        # Validate old value matches current value (when possible)
+        if "old_value" in correction:
+            found = True
+            check_current: Any = result
+            for part in parts:
+                if not isinstance(check_current, dict) or part not in check_current:
+                    found = False
+                    check_current = None
+                    break
+                check_current = check_current[part]
+            if not found or check_current != old_value:
+                raise ValueError(
+                    f"Correction old_value does not match current value for '{field_path}'"
+                )
 
         # Navigate to parent
         for part in parts[:-1]:

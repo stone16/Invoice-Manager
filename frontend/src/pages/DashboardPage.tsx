@@ -46,7 +46,7 @@ const DashboardPage: React.FC = () => {
     try {
       // Load configs and flows in parallel
       const [configsResponse, flowsResponse] = await Promise.all([
-        listConfigs({ page_size: 100, status: 1 }),
+        listConfigs({ status: 1 }),
         listFlows({ limit: 50, offset: 0 }),
       ]);
 
