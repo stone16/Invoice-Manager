@@ -10,6 +10,7 @@ services:
       POSTGRES_DB: invoice_db
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ./backend/db/init.sql:/docker-entrypoint-initdb.d/init.sql
     ports:
       - "5432:5432"
     healthcheck:
