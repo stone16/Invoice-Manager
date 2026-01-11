@@ -24,8 +24,8 @@ except ImportError:  # pragma: no cover - dependency added in requirements
 
 
 def _utc_now() -> datetime:
-    """Return timezone-aware UTC timestamp."""
-    return datetime.now(timezone.utc)
+    """Return timezone-naive UTC timestamp for database compatibility."""
+    return datetime.utcnow()
 
 
 class FileContentType(IntEnum):
