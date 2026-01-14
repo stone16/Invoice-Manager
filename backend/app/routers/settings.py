@@ -10,6 +10,7 @@ logger = logging.getLogger(__name__)
 
 from app.config import get_settings, clear_settings_cache
 from app.services.llm_service import get_llm_service, reset_llm_service, PROVIDERS
+from app.services.model_registry import get_models_with_fallback
 
 router = APIRouter()
 
@@ -224,3 +225,55 @@ def _get_provider_model(provider_name: str) -> Optional[str]:
         "zhipu": settings.zhipu_model,
     }
     return model_map.get(provider_name)
+
+
+class ModelInfo(BaseModel):
+    """Information about a model."""
+    id: str
+    name: str
+    vision: bool
+    context_length: Optional[int] = None
+    pricing: Optional[dict] = None
+
+
+class ModelsResponse(BaseModel):
+    """Response for available models."""
+    models: List[ModelInfo]
+    source: str  # "openrouter" or "fallback"
+
+
+@router.get("/models", response_model=ModelsResponse)
+async def get_available_models(
+    provider: Optional[str] = None,
+    vision_only: bool = False
+):
+    """Get available models, optionally filtered by provider or vision capability.
+
+    Args:
+        provider: Filter by provider name (openai, anthropic, google, qwen, deepseek, zhipu)
+        vision_only: If true, only return models that support image input
+
+    Returns:
+        List of available models with their capabilities
+    """
+    if provider:
+        if provider.lower() not in PROVIDERS:
+            raise HTTPException(
+                status_code=400,
+                detail=f"不支持的LLM提供商: {provider}。支持的提供商: {', '.join(PROVIDERS.keys())}"
+            )
+        models = get_models_with_fallback(provider, vision_only)
+    else:
+        # Get models for all providers
+        all_models = []
+        for prov in PROVIDERS.keys():
+            all_models.extend(get_models_with_fallback(prov, vision_only))
+        models = all_models
+
+    # Determine source based on model ID format (OpenRouter uses "provider/model" format)
+    source = "openrouter" if models and "/" in models[0].get("id", "") else "fallback"
+
+    return ModelsResponse(
+        models=[ModelInfo(**m) for m in models],
+        source=source
+    )

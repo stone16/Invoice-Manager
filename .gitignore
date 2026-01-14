@@ -77,3 +77,6 @@ coverage/
 *.bak
 *.tmp
 *.temp
+
+attachments/
+runs/

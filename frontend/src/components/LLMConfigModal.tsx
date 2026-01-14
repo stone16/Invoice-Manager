@@ -11,15 +11,17 @@ import {
   Spin,
   Tag,
   Divider,
+  Tooltip,
 } from 'antd';
 import {
   SettingOutlined,
   CheckCircleOutlined,
   ExclamationCircleOutlined,
   ApiOutlined,
+  EyeOutlined,
 } from '@ant-design/icons';
-import { getLLMStatus, configureLLM, testLLMConnection } from '../services/api';
-import type { LLMStatusResponse, LLMProviderInfo } from '../types/invoice';
+import { getLLMStatus, configureLLM, testLLMConnection, getAvailableModels } from '../services/api';
+import type { LLMStatusResponse, LLMProviderInfo, ModelInfo } from '../types/invoice';
 
 interface LLMConfigModalProps {
   open: boolean;
@@ -27,14 +29,34 @@ interface LLMConfigModalProps {
   onConfigured?: () => void;
 }
 
-// Default models for each provider
-const DEFAULT_MODELS: Record<string, string[]> = {
-  openai: ['gpt-4o-mini', 'gpt-4o', 'gpt-4-turbo', 'gpt-3.5-turbo'],
-  anthropic: ['claude-3-haiku-20240307', 'claude-3-sonnet-20240229', 'claude-3-opus-20240229', 'claude-3-5-sonnet-20241022'],
-  google: ['gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-pro'],
-  qwen: ['qwen-turbo', 'qwen-plus', 'qwen-max'],
-  deepseek: ['deepseek-chat', 'deepseek-coder'],
-  zhipu: ['glm-4-flash', 'glm-4', 'glm-4-plus'],
+// Fallback models for each provider (used when API fails)
+const FALLBACK_MODELS: Record<string, ModelInfo[]> = {
+  openai: [
+    { id: 'gpt-4o', name: 'GPT-4o', vision: true },
+    { id: 'gpt-4o-mini', name: 'GPT-4o Mini', vision: true },
+    { id: 'gpt-4-turbo', name: 'GPT-4 Turbo', vision: true },
+  ],
+  anthropic: [
+    { id: 'claude-sonnet-4-20250514', name: 'Claude Sonnet 4', vision: true },
+    { id: 'claude-3-5-sonnet-20241022', name: 'Claude 3.5 Sonnet', vision: true },
+    { id: 'claude-3-5-haiku-20241022', name: 'Claude 3.5 Haiku', vision: true },
+  ],
+  google: [
+    { id: 'gemini-2.0-flash', name: 'Gemini 2.0 Flash', vision: true },
+    { id: 'gemini-1.5-pro', name: 'Gemini 1.5 Pro', vision: true },
+    { id: 'gemini-1.5-flash', name: 'Gemini 1.5 Flash', vision: true },
+  ],
+  qwen: [
+    { id: 'qwen2.5-vl-72b-instruct', name: 'Qwen 2.5 VL 72B', vision: true },
+    { id: 'qwen-turbo', name: 'Qwen Turbo', vision: false },
+  ],
+  deepseek: [
+    { id: 'deepseek-chat', name: 'DeepSeek Chat', vision: false },
+  ],
+  zhipu: [
+    { id: 'glm-4v', name: 'GLM-4V', vision: true },
+    { id: 'glm-4-flash', name: 'GLM-4 Flash', vision: false },
+  ],
 };
 
 // Providers that support custom base URL
@@ -46,6 +68,9 @@ function LLMConfigModal({ open, onClose, onConfigured }: LLMConfigModalProps) {
   const [configuring, setConfiguring] = useState(false);
   const [status, setStatus] = useState<LLMStatusResponse | null>(null);
   const [selectedProvider, setSelectedProvider] = useState<string>('');
+  const [models, setModels] = useState<ModelInfo[]>([]);
+  const [modelsLoading, setModelsLoading] = useState(false);
+  const [modelsSource, setModelsSource] = useState<'openrouter' | 'fallback'>('fallback');
   const [form] = Form.useForm();
 
   const fetchStatus = async () => {
@@ -55,11 +80,35 @@ function LLMConfigModal({ open, onClose, onConfigured }: LLMConfigModalProps) {
       setStatus(data);
       if (data.active_provider) {
         setSelectedProvider(data.active_provider);
+        // Fetch models for the active provider
+        await fetchModels(data.active_provider);
       }
     } catch (error) {
       console.error('Failed to fetch LLM status:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchModels = async (provider: string) => {
+    setModelsLoading(true);
+    try {
+      const response = await getAvailableModels(provider, false);
+      if (response.models && response.models.length > 0) {
+        setModels(response.models);
+        setModelsSource(response.source);
+      } else {
+        // Fall back to hardcoded models
+        setModels(FALLBACK_MODELS[provider] || []);
+        setModelsSource('fallback');
+      }
+    } catch (error) {
+      console.error('Failed to fetch models:', error);
+      // Fall back to hardcoded models
+      setModels(FALLBACK_MODELS[provider] || []);
+      setModelsSource('fallback');
+    } finally {
+      setModelsLoading(false);
     }
   };
 
@@ -70,15 +119,30 @@ function LLMConfigModal({ open, onClose, onConfigured }: LLMConfigModalProps) {
     }
   }, [open]);
 
-  const handleProviderChange = (provider: string) => {
+  const handleProviderChange = async (provider: string) => {
     setSelectedProvider(provider);
+    // Fetch models for the new provider
+    await fetchModels(provider);
+    // Set default model from fetched list
+    const providerModels = FALLBACK_MODELS[provider] || [];
     form.setFieldsValue({
       provider,
-      model: DEFAULT_MODELS[provider]?.[0] || '',
+      model: providerModels[0]?.id || '',
       api_key: '',
       base_url: '',
     });
   };
+
+  // Update form model when models are fetched
+  useEffect(() => {
+    if (models.length > 0 && selectedProvider) {
+      const currentModel = form.getFieldValue('model');
+      // If current model not in list, set to first available
+      if (!currentModel || !models.find(m => m.id === currentModel)) {
+        form.setFieldsValue({ model: models[0].id });
+      }
+    }
+  }, [models, selectedProvider]);
 
   const handleConfigure = async () => {
     try {
@@ -197,7 +261,7 @@ function LLMConfigModal({ open, onClose, onConfigured }: LLMConfigModalProps) {
           ) : (
             <Alert
               message="未配置LLM服务"
-              description="发票确认功能需要配置LLM服务来进行OCR结果比对。请选择一个LLM提供商并配置API密钥。"
+              description="LLM 为可选增强功能，可提升发票识别准确率与比对能力。不配置也可使用 OCR-only 流程。"
               type="warning"
               showIcon
               icon={<ExclamationCircleOutlined />}
@@ -221,7 +285,7 @@ function LLMConfigModal({ open, onClose, onConfigured }: LLMConfigModalProps) {
             layout="vertical"
             initialValues={{
               provider: selectedProvider || 'openai',
-              model: DEFAULT_MODELS[selectedProvider || 'openai']?.[0] || '',
+              model: FALLBACK_MODELS[selectedProvider || 'openai']?.[0]?.id || '',
             }}
           >
             <Form.Item
@@ -252,14 +316,31 @@ function LLMConfigModal({ open, onClose, onConfigured }: LLMConfigModalProps) {
 
             <Form.Item
               name="model"
-              label="模型"
+              label={
+                <Space>
+                  <span>模型</span>
+                  {modelsSource === 'openrouter' && (
+                    <Tag color="blue" style={{ fontSize: 10 }}>来自 OpenRouter</Tag>
+                  )}
+                </Space>
+              }
             >
               <Select
                 placeholder="选择模型"
                 allowClear
-                options={DEFAULT_MODELS[selectedProvider || 'openai']?.map((m) => ({
-                  label: m,
-                  value: m,
+                loading={modelsLoading}
+                options={models.map((m) => ({
+                  label: (
+                    <Space>
+                      <span>{m.name || m.id}</span>
+                      {m.vision && (
+                        <Tooltip title="支持图像识别">
+                          <EyeOutlined style={{ color: '#1890ff' }} />
+                        </Tooltip>
+                      )}
+                    </Space>
+                  ),
+                  value: m.id,
                 }))}
               />
             </Form.Item>

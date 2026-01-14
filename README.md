@@ -163,9 +163,9 @@ docker-compose up -d
 
 | 服务 | 地址 | 说明 |
 |-----|------|------|
-| 前端界面 | http://localhost:5173 | 主操作界面 |
-| 后端 API | http://localhost:8000 | REST API |
-| API 文档 | http://localhost:8000/docs | Swagger UI |
+| 前端界面 | http://localhost:15173 | 主操作界面 |
+| 后端 API | http://localhost:18080 | REST API |
+| API 文档 | http://localhost:18080/docs | Swagger UI |
 
 ### 配置 LLM | Configure LLM
 
@@ -272,7 +272,7 @@ POST /api/settings/llm/configure
 POST /api/settings/llm/test
 ```
 
-完整 API 文档请访问 http://localhost:8000/docs
+完整 API 文档请访问 http://localhost:18080/docs
 
 ---
 

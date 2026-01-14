@@ -150,3 +150,20 @@ export interface LLMTestResponse {
   message: string;
   response: string;
 }
+
+// Model Registry Types
+export interface ModelInfo {
+  id: string;
+  name: string;
+  vision: boolean;
+  context_length?: number;
+  pricing?: {
+    prompt?: string;
+    completion?: string;
+  };
+}
+
+export interface ModelsResponse {
+  models: ModelInfo[];
+  source: 'openrouter' | 'fallback';
+}

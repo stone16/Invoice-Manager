@@ -4,7 +4,7 @@ import re
 import logging
 import threading
 from io import BytesIO
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List, Tuple
 from datetime import datetime, date
 
 from PIL import Image
@@ -44,34 +44,64 @@ class OCRService:
                     logger.info("PaddleOCR initialized successfully")
         return self._ocr
 
-    def _extract_text_from_result(self, result) -> tuple[list, list]:
-        """Extract text and confidences from OCR result (v2.x API)."""
-        text_lines = []
-        confidences = []
+    def _extract_text_from_result(self, result) -> Tuple[List[str], List[float], List[Dict[str, Any]]]:
+        """Extract text, confidences, and line metadata from OCR result (v2.x API)."""
+        text_lines: List[str] = []
+        confidences: List[float] = []
+        line_items: List[Dict[str, Any]] = []
 
         if not result:
-            return text_lines, confidences
+            return text_lines, confidences, line_items
 
         # PaddleOCR v2.x returns list of [bbox, (text, confidence)]
         for item in result:
             if isinstance(item, list) and len(item) >= 2:
-                # Format: [bbox, (text, confidence)]
+                bbox = item[0]
                 if isinstance(item[1], tuple) and len(item[1]) >= 2:
                     text, confidence = item[1]
-                    if text:
-                        text_lines.append(text)
-                        confidences.append(confidence * 100 if confidence <= 1.0 else confidence)
+                    if not text:
+                        continue
 
-        return text_lines, confidences
+                    conf_score = confidence * 100 if confidence <= 1.0 else confidence
+                    text_lines.append(text)
+                    confidences.append(conf_score)
 
-    def process_image(self, image_data: bytes) -> tuple[str, float]:
+                    if isinstance(bbox, list) and len(bbox) >= 4:
+                        xs = [point[0] for point in bbox if isinstance(point, (list, tuple)) and len(point) >= 2]
+                        ys = [point[1] for point in bbox if isinstance(point, (list, tuple)) and len(point) >= 2]
+                        if xs and ys:
+                            min_x = min(xs)
+                            max_x = max(xs)
+                            min_y = min(ys)
+                            max_y = max(ys)
+                            line_items.append({
+                                "text": text,
+                                "confidence": conf_score,
+                                "bbox": bbox,
+                                "min_x": min_x,
+                                "max_x": max_x,
+                                "min_y": min_y,
+                                "max_y": max_y,
+                                "center_x": (min_x + max_x) / 2,
+                                "center_y": (min_y + max_y) / 2,
+                            })
+
+        return text_lines, confidences, line_items
+
+    def _sort_lines_by_position(self, lines: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """Sort OCR lines by approximate reading order (top-to-bottom, left-to-right)."""
+        if not lines:
+            return []
+        return sorted(lines, key=lambda item: (round(item["min_y"] / 10), item["min_x"]))
+
+    def process_image(self, image_data: bytes) -> Tuple[str, float, List[Dict[str, Any]]]:
         """Process image bytes and extract text.
 
         Args:
             image_data: Raw image bytes
 
         Returns:
-            Tuple of (extracted_text, average_confidence)
+            Tuple of (extracted_text, average_confidence, ocr_lines)
         """
         try:
             image = Image.open(BytesIO(image_data))
@@ -82,12 +112,12 @@ class OCRService:
             if result and result[0]:
                 result = result[0]
 
-            text_lines, confidences = self._extract_text_from_result(result)
-
-            combined_text = "\n".join(text_lines)
+            text_lines, confidences, line_items = self._extract_text_from_result(result)
+            line_items = self._sort_lines_by_position(line_items)
+            combined_text = "\n".join([line["text"] for line in line_items] or text_lines)
             avg_confidence = sum(confidences) / len(confidences) if confidences else 0.0
 
-            return combined_text, avg_confidence
+            return combined_text, avg_confidence, line_items
 
         except Exception as e:
             logger.error(f"OCR processing failed: {e}")
@@ -148,7 +178,7 @@ class OCRService:
             logger.warning(f"PDF text layer extraction failed: {e}")
             return "", False
 
-    def process_pdf(self, pdf_data: bytes) -> tuple[str, float]:
+    def process_pdf(self, pdf_data: bytes) -> Tuple[str, float, List[Dict[str, Any]]]:
         """Process PDF and extract text from all pages.
 
         First tries to extract embedded text layer (faster, more accurate for digital PDFs),
@@ -158,7 +188,7 @@ class OCRService:
             pdf_data: Raw PDF bytes
 
         Returns:
-            Tuple of (extracted_text, average_confidence)
+            Tuple of (extracted_text, average_confidence, ocr_lines)
         """
         # First try to extract embedded text layer
         text_layer, has_useful_text = self._extract_pdf_text_layer(pdf_data)
@@ -166,7 +196,7 @@ class OCRService:
         if has_useful_text:
             logger.info("Using PDF embedded text layer instead of OCR")
             # High confidence for embedded text
-            return text_layer, 99.0
+            return text_layer, 99.0, []
 
         # Fall back to OCR for scanned PDFs
         logger.info("PDF has no useful text layer, falling back to OCR")
@@ -181,6 +211,7 @@ class OCRService:
 
             all_text = []
             all_confidences = []
+            all_lines: List[Dict[str, Any]] = []
 
             for image in images:
                 image_array = np.array(image)
@@ -190,14 +221,16 @@ class OCRService:
                 if result and result[0]:
                     result = result[0]
 
-                text_lines, confidences = self._extract_text_from_result(result)
+                text_lines, confidences, line_items = self._extract_text_from_result(result)
                 all_text.extend(text_lines)
                 all_confidences.extend(confidences)
+                all_lines.extend(line_items)
 
-            combined_text = "\n".join(all_text)
+            all_lines = self._sort_lines_by_position(all_lines)
+            combined_text = "\n".join([line["text"] for line in all_lines] or all_text)
             avg_confidence = sum(all_confidences) / len(all_confidences) if all_confidences else 0.0
 
-            return combined_text, avg_confidence
+            return combined_text, avg_confidence, all_lines
 
         except Exception as e:
             logger.error(f"PDF processing failed: {e}")
@@ -245,15 +278,166 @@ class FieldExtractor:
         chinese_keywords = ['发票', '购买方', '销售方', '税额', '价税合计', '纳税人']
         return any(kw in text for kw in chinese_keywords)
 
-    def _extract_buyer_seller(self, text: str) -> Dict[str, Optional[str]]:
-        """Extract buyer and seller info based on position in OCR text.
+    def _find_label_positions(self, text: str) -> Dict[str, list[int]]:
+        """Find positions of buyer/seller label markers in text.
 
-        PaddleOCR reads two-column invoices in interleaved order, causing
-        buyer/seller sections to be mixed. We use position-based extraction:
-        - First company name = buyer
-        - Second company name = seller
-        - First tax ID = buyer's tax ID
-        - Second tax ID = seller's tax ID
+        Returns:
+            Dictionary with 'buyer' and 'seller' keys, each containing
+            list of character positions where labels were found.
+        """
+        # Define label markers for buyer and seller
+        buyer_labels = ['购买方', '购方', '购货单位']
+        # Seller labels include contextual markers that only appear in seller section
+        seller_labels = ['销售方', '销方', '销货单位', '开票人', '收款人', '复核']
+
+        positions: Dict[str, list[int]] = {'buyer': [], 'seller': []}
+
+        for label in buyer_labels:
+            for match in re.finditer(re.escape(label), text):
+                positions['buyer'].append(match.start())
+
+        for label in seller_labels:
+            for match in re.finditer(re.escape(label), text):
+                positions['seller'].append(match.start())
+
+        # Handle vertical text format: 购/买/方 or 销/售/方 (with spaces/newlines)
+        vertical_buyer = re.finditer(r'购\s*买\s*方', text)
+        for match in vertical_buyer:
+            positions['buyer'].append(match.start())
+
+        vertical_seller = re.finditer(r'销\s*售\s*方', text)
+        for match in vertical_seller:
+            positions['seller'].append(match.start())
+
+        # Handle spaced labels like "购 名称" / "销 名称" and "买 方" / "售 方"
+        for match in re.finditer(r'购\s*名\s*称', text):
+            positions['buyer'].append(match.start())
+        for match in re.finditer(r'销\s*名\s*称', text):
+            positions['seller'].append(match.start())
+        for match in re.finditer(r'买\s*方', text):
+            positions['buyer'].append(match.start())
+        for match in re.finditer(r'售\s*方', text):
+            positions['seller'].append(match.start())
+
+        return positions
+
+    def _find_label_positions_from_lines(self, lines: List[Dict[str, Any]]) -> Dict[str, List[Dict[str, Any]]]:
+        """Find buyer/seller label lines using OCR line metadata."""
+        buyer_labels = ['购买方', '购方', '购货单位']
+        seller_labels = ['销售方', '销方', '销货单位', '开票人', '收款人', '复核']
+        buyer_patterns = [
+            r'购\s*买\s*方',
+            r'购\s*名\s*称',
+            r'买\s*方',
+        ]
+        seller_patterns = [
+            r'销\s*售\s*方',
+            r'销\s*名\s*称',
+            r'售\s*方',
+        ]
+
+        positions: Dict[str, List[Dict[str, Any]]] = {'buyer': [], 'seller': []}
+
+        for line in lines:
+            text = line.get("text", "")
+            if any(label in text for label in buyer_labels) or any(re.search(pat, text) for pat in buyer_patterns):
+                positions['buyer'].append(line)
+            if any(label in text for label in seller_labels) or any(re.search(pat, text) for pat in seller_patterns):
+                positions['seller'].append(line)
+
+        return positions
+
+    def _line_distance(self, line: Dict[str, Any], label_line: Dict[str, Any]) -> float:
+        """Calculate weighted distance between a line and a label line."""
+        dy = abs(line["center_y"] - label_line["center_y"])
+        dx = abs(line["center_x"] - label_line["center_x"])
+        return dy + (dx * 0.3)
+
+    def _classify_line_by_labels(self, line: Dict[str, Any], label_lines: Dict[str, List[Dict[str, Any]]]) -> Optional[str]:
+        """Classify a line as buyer or seller based on nearest label line."""
+        buyer_lines = label_lines.get("buyer", [])
+        seller_lines = label_lines.get("seller", [])
+
+        def min_distance(lines: List[Dict[str, Any]]) -> float:
+            if not lines:
+                return float('inf')
+            return min(self._line_distance(line, label) for label in lines)
+
+        buyer_dist = min_distance(buyer_lines)
+        seller_dist = min_distance(seller_lines)
+
+        if buyer_dist == float('inf') and seller_dist == float('inf'):
+            return None
+
+        max_dist = max(buyer_dist, seller_dist)
+        if max_dist and abs(buyer_dist - seller_dist) / max_dist < 0.15:
+            return None
+
+        return 'buyer' if buyer_dist < seller_dist else 'seller'
+
+    def _min_label_distance(
+        self,
+        line: Dict[str, Any],
+        label_lines: Dict[str, List[Dict[str, Any]]],
+        label_key: str
+    ) -> float:
+        lines = label_lines.get(label_key, [])
+        if not lines:
+            return float('inf')
+        return min(self._line_distance(line, label) for label in lines)
+
+    def _normalize_line_text(self, text: str) -> str:
+        """Normalize OCR line text for matching."""
+        return re.sub(r'\s+', '', text or '')
+
+    def _parse_inline_buyer_seller_names(self, text: str) -> Tuple[Optional[str], Optional[str]]:
+        """Parse buyer/seller names from inline label text."""
+        match = re.search(r'购\s*名\s*称[：:]\s*(.+?)\s*销\s*名\s*称[：:]\s*(.+)', text)
+        if not match:
+            return None, None
+        buyer_name = self._clean_chinese_spaces(match.group(1))
+        seller_name = self._clean_chinese_spaces(match.group(2))
+        return buyer_name, seller_name
+
+    def _find_line_for_value(self, value: str, lines: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+        """Find the line containing the given value."""
+        if not value:
+            return None
+        normalized_value = self._normalize_line_text(value)
+        for line in lines:
+            line_text = line.get("text", "")
+            if value in line_text:
+                return line
+            if normalized_value and normalized_value in self._normalize_line_text(line_text):
+                return line
+        return None
+
+    def _classify_by_proximity(self, item_pos: int, label_positions: Dict[str, list[int]]) -> str:
+        """Classify an item as 'buyer' or 'seller' based on nearest label.
+
+        Args:
+            item_pos: Character position of the item (company name or tax ID)
+            label_positions: Dictionary from _find_label_positions()
+
+        Returns:
+            'buyer' or 'seller' based on which label is closer
+        """
+        def min_distance(positions: list[int]) -> float:
+            if not positions:
+                return float('inf')
+            return min(abs(item_pos - pos) for pos in positions)
+
+        buyer_dist = min_distance(label_positions['buyer'])
+        seller_dist = min_distance(label_positions['seller'])
+
+        return 'buyer' if buyer_dist < seller_dist else 'seller'
+
+    def _extract_buyer_seller(self, text: str, lines: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Optional[str]]:
+        """Extract buyer and seller info using label proximity.
+
+        Uses context-aware extraction based on proximity to label markers
+        (购买方/销售方) rather than relying on match order. This handles
+        PaddleOCR's interleaved column reading correctly.
 
         Args:
             text: OCR extracted text
@@ -268,28 +452,232 @@ class FieldExtractor:
             'seller_tax_id': None,
         }
 
-        # Pattern to match company names after "称：" or "名称："
-        # The OCR text often has broken lines like "名\n称：" so we handle that
-        # Use non-greedy match and stop before next "销" or "名称" marker
-        # Match company name ending with 公司/集团, but stop before 销/购/名称
+        label_positions = self._find_label_positions(text)
+        has_labels = bool(label_positions['buyer'] or label_positions['seller'])
+
+        line_labels = None
+        if lines:
+            line_labels = self._find_label_positions_from_lines(lines)
+
+        if line_labels and line_labels['buyer'] and line_labels['seller']:
+            line_result = self._extract_buyer_seller_from_lines(lines, line_labels)
+            result.update({k: v for k, v in line_result.items() if v})
+
+        if has_labels:
+            text_result = self._extract_buyer_seller_from_text(text, label_positions)
+            for key, value in text_result.items():
+                if not result.get(key) and value:
+                    result[key] = value
+
+        if not all(result.values()):
+            fallback = self._extract_buyer_seller_fallback(text)
+            for key, value in fallback.items():
+                if not result.get(key) and value:
+                    result[key] = value
+
+        if line_labels and (line_labels['buyer'] and line_labels['seller']):
+            result = self._swap_if_needed(result, lines, line_labels)
+
+        if not has_labels and not (line_labels and (line_labels['buyer'] or line_labels['seller'])):
+            logger.info("No buyer/seller labels found, using position-based fallback")
+
+        return result
+
+    def _extract_buyer_seller_from_text(
+        self,
+        text: str,
+        label_positions: Dict[str, list[int]]
+    ) -> Dict[str, Optional[str]]:
+        """Extract buyer/seller using label proximity in text."""
+        result = {
+            'buyer_name': None,
+            'buyer_tax_id': None,
+            'seller_name': None,
+            'seller_tax_id': None,
+        }
+
+        for line in text.splitlines():
+            if '购' in line and '销' in line:
+                buyer_name, seller_name = self._parse_inline_buyer_seller_names(line)
+                if buyer_name:
+                    result['buyer_name'] = buyer_name
+                if seller_name:
+                    result['seller_name'] = seller_name
+                if result['buyer_name'] or result['seller_name']:
+                    break
+
+        name_pattern = r'(?:名\s*)?称[：:]\s*(.+)$'
+        name_matches = [(m.start(), m.group(1)) for m in re.finditer(name_pattern, text, re.MULTILINE)]
+
+        if name_matches and not (result['buyer_name'] and result['seller_name']):
+            buyers = []
+            sellers = []
+
+            for pos, name in name_matches:
+                classification = self._classify_by_proximity(pos, label_positions)
+                cleaned_name = self._clean_chinese_spaces(name)
+                if classification == 'buyer':
+                    buyers.append(cleaned_name)
+                else:
+                    sellers.append(cleaned_name)
+
+            if buyers:
+                result['buyer_name'] = buyers[0]
+            if sellers:
+                result['seller_name'] = sellers[0]
+
+            logger.info(f"Label-based extraction: buyer={result['buyer_name']}, seller={result['seller_name']}")
+
+        tax_id_pattern = r'(?:纳税人识别号|统一社会信用代码|税号)[：:]\s*([A-Z0-9]{15,20})'
+        if not result['buyer_tax_id'] and not result['seller_tax_id']:
+            for line in text.splitlines():
+                line_matches = re.findall(tax_id_pattern, line, re.IGNORECASE)
+                if len(line_matches) >= 2:
+                    result['buyer_tax_id'] = line_matches[0].strip()
+                    result['seller_tax_id'] = line_matches[1].strip()
+                    break
+
+        tax_matches = [(m.start(), m.group(1)) for m in re.finditer(tax_id_pattern, text, re.IGNORECASE)]
+
+        if tax_matches and not (result['buyer_tax_id'] and result['seller_tax_id']):
+            buyer_tax_ids = []
+            seller_tax_ids = []
+
+            for pos, tax_id in tax_matches:
+                classification = self._classify_by_proximity(pos, label_positions)
+                if classification == 'buyer':
+                    buyer_tax_ids.append(tax_id.strip())
+                else:
+                    seller_tax_ids.append(tax_id.strip())
+
+            if buyer_tax_ids:
+                result['buyer_tax_id'] = buyer_tax_ids[0]
+            if seller_tax_ids:
+                result['seller_tax_id'] = seller_tax_ids[0]
+
+        return result
+
+    def _extract_buyer_seller_from_lines(
+        self,
+        lines: List[Dict[str, Any]],
+        label_lines: Dict[str, List[Dict[str, Any]]]
+    ) -> Dict[str, Optional[str]]:
+        """Extract buyer/seller fields from OCR lines using label proximity."""
+        result = {
+            'buyer_name': None,
+            'buyer_tax_id': None,
+            'seller_name': None,
+            'seller_tax_id': None,
+        }
+
+        buyers: List[Tuple[float, str]] = []
+        sellers: List[Tuple[float, str]] = []
+        buyer_tax_ids: List[Tuple[float, str]] = []
+        seller_tax_ids: List[Tuple[float, str]] = []
+
+        name_pattern = r'(?:名\s*)?称[：:]\s*(.+)$'
+        tax_id_pattern = r'(?:纳税人识别号|统一社会信用代码|税号)[：:]\s*([A-Z0-9]{15,20})'
+
+        for line in lines:
+            text = line.get("text", "")
+            inline_buyer, inline_seller = self._parse_inline_buyer_seller_names(text)
+            if inline_buyer or inline_seller:
+                if inline_buyer and not result['buyer_name']:
+                    result['buyer_name'] = inline_buyer
+                if inline_seller and not result['seller_name']:
+                    result['seller_name'] = inline_seller
+            name_match = re.search(name_pattern, text)
+            tax_match = re.search(tax_id_pattern, text, re.IGNORECASE)
+
+            classification = self._classify_line_by_labels(line, label_lines)
+            if name_match and classification:
+                cleaned_name = self._clean_chinese_spaces(name_match.group(1))
+                if classification == 'buyer':
+                    buyers.append((self._min_label_distance(line, label_lines, 'buyer'), cleaned_name))
+                else:
+                    sellers.append((self._min_label_distance(line, label_lines, 'seller'), cleaned_name))
+
+            if tax_match and classification:
+                tax_id = tax_match.group(1).strip()
+                if classification == 'buyer':
+                    buyer_tax_ids.append((self._min_label_distance(line, label_lines, 'buyer'), tax_id))
+                else:
+                    seller_tax_ids.append((self._min_label_distance(line, label_lines, 'seller'), tax_id))
+
+        if buyers:
+            result['buyer_name'] = sorted(buyers, key=lambda x: x[0])[0][1]
+        if sellers:
+            result['seller_name'] = sorted(sellers, key=lambda x: x[0])[0][1]
+        if buyer_tax_ids:
+            result['buyer_tax_id'] = sorted(buyer_tax_ids, key=lambda x: x[0])[0][1]
+        if seller_tax_ids:
+            result['seller_tax_id'] = sorted(seller_tax_ids, key=lambda x: x[0])[0][1]
+
+        return result
+
+    def _swap_if_needed(
+        self,
+        result: Dict[str, Optional[str]],
+        lines: List[Dict[str, Any]],
+        label_lines: Dict[str, List[Dict[str, Any]]]
+    ) -> Dict[str, Optional[str]]:
+        """Swap buyer/seller fields when label proximity indicates reversal."""
+        buyer_name = result.get("buyer_name")
+        seller_name = result.get("seller_name")
+
+        if buyer_name and seller_name:
+            buyer_line = self._find_line_for_value(buyer_name, lines)
+            seller_line = self._find_line_for_value(seller_name, lines)
+            if buyer_line and seller_line:
+                buyer_class = self._classify_line_by_labels(buyer_line, label_lines)
+                seller_class = self._classify_line_by_labels(seller_line, label_lines)
+                if buyer_class == 'seller' and seller_class == 'buyer':
+                    result["buyer_name"], result["seller_name"] = seller_name, buyer_name
+                    logger.info("Swapped buyer/seller names based on label proximity")
+
+        buyer_tax = result.get("buyer_tax_id")
+        seller_tax = result.get("seller_tax_id")
+        if buyer_tax and seller_tax:
+            buyer_line = self._find_line_for_value(buyer_tax, lines)
+            seller_line = self._find_line_for_value(seller_tax, lines)
+            if buyer_line and seller_line:
+                buyer_class = self._classify_line_by_labels(buyer_line, label_lines)
+                seller_class = self._classify_line_by_labels(seller_line, label_lines)
+                if buyer_class == 'seller' and seller_class == 'buyer':
+                    result["buyer_tax_id"], result["seller_tax_id"] = seller_tax, buyer_tax
+                    logger.info("Swapped buyer/seller tax IDs based on label proximity")
+
+        return result
+
+    def _extract_buyer_seller_fallback(self, text: str) -> Dict[str, Optional[str]]:
+        """Fallback position-based extraction when no labels found.
+
+        Uses original logic: first company name = buyer, second = seller.
+        """
+        result = {
+            'buyer_name': None,
+            'buyer_tax_id': None,
+            'seller_name': None,
+            'seller_tax_id': None,
+        }
+
+        # Pattern to match company names
         name_pattern = r'(?:名\s*)?称[：:]\s*([^销购\n]*?(?:有限公司|股份公司|集团|公司))'
         name_matches = re.findall(name_pattern, text)
 
         if len(name_matches) >= 2:
             result['buyer_name'] = self._clean_chinese_spaces(name_matches[0])
             result['seller_name'] = self._clean_chinese_spaces(name_matches[1])
-            logger.info(f"Position-based extraction: buyer={result['buyer_name']}, seller={result['seller_name']}")
+            logger.info(f"Position-based fallback: buyer={result['buyer_name']}, seller={result['seller_name']}")
         elif len(name_matches) == 1:
-            # Only one match - try to determine if it's buyer or seller from context
             cleaned_name = self._clean_chinese_spaces(name_matches[0])
+            # Try to determine from context
             if '购' in text[:text.find(name_matches[0])] if name_matches[0] in text else False:
                 result['buyer_name'] = cleaned_name
             else:
                 result['seller_name'] = cleaned_name
-            logger.info(f"Single name found: {cleaned_name}")
 
-        # Pattern to match tax IDs (纳税人识别号)
-        # Chinese tax IDs are typically 15-20 characters with letters and numbers
+        # Tax IDs - position based
         tax_id_pattern = r'(?:纳税人识别号|统一社会信用代码|税号)[：:]\s*([A-Z0-9]{15,20})'
         tax_matches = re.findall(tax_id_pattern, text, re.IGNORECASE)
 
@@ -297,29 +685,28 @@ class FieldExtractor:
             result['buyer_tax_id'] = tax_matches[0].strip()
             result['seller_tax_id'] = tax_matches[1].strip()
         elif len(tax_matches) == 1:
-            # Try to match with identified company
             if result['buyer_name'] and not result['seller_name']:
                 result['buyer_tax_id'] = tax_matches[0].strip()
             elif result['seller_name'] and not result['buyer_name']:
                 result['seller_tax_id'] = tax_matches[0].strip()
 
-        # Fallback: try alternative patterns if nothing found
+        # Ultimate fallback: simpler pattern
         if not result['buyer_name'] and not result['seller_name']:
-            # Try simpler pattern - any company name
             simple_pattern = r'([^\n]*(?:有限公司|股份公司))'
             simple_matches = re.findall(simple_pattern, text)
             if len(simple_matches) >= 2:
                 result['buyer_name'] = self._clean_chinese_spaces(simple_matches[0])
                 result['seller_name'] = self._clean_chinese_spaces(simple_matches[1])
-                logger.info(f"Fallback extraction: buyer={result['buyer_name']}, seller={result['seller_name']}")
+                logger.info(f"Ultimate fallback: buyer={result['buyer_name']}, seller={result['seller_name']}")
 
         return result
 
-    def extract_fields(self, text: str) -> Dict[str, Any]:
+    def extract_fields(self, text: str, lines: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
         """Extract all invoice fields from OCR text.
 
         Args:
             text: OCR extracted text
+            lines: OCR line metadata (with bounding boxes)
 
         Returns:
             Dictionary of extracted fields
@@ -362,7 +749,7 @@ class FieldExtractor:
 
         # For Chinese invoices, use position-based extraction for buyer/seller
         if is_chinese:
-            buyer_seller = self._extract_buyer_seller(text)
+            buyer_seller = self._extract_buyer_seller(text, lines)
             fields['buyer_name'] = buyer_seller['buyer_name']
             fields['buyer_tax_id'] = buyer_seller['buyer_tax_id']
             fields['seller_name'] = buyer_seller['seller_name']

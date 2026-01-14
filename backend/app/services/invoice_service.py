@@ -58,11 +58,11 @@ def _run_ocr(file_data: bytes, file_type: str) -> Tuple[str, float, Dict[str, An
     extractor = get_field_extractor()
 
     if file_type == 'pdf':
-        raw_text, confidence = ocr_service.process_pdf(file_data)
+        raw_text, confidence, ocr_lines = ocr_service.process_pdf(file_data)
     else:
-        raw_text, confidence = ocr_service.process_image(file_data)
+        raw_text, confidence, ocr_lines = ocr_service.process_image(file_data)
 
-    ocr_fields = extractor.extract_fields(raw_text)
+    ocr_fields = extractor.extract_fields(raw_text, ocr_lines)
     return raw_text, confidence, ocr_fields
 
 
@@ -116,6 +116,19 @@ def _run_llm_vision(file_data: bytes, file_type: str) -> Dict[str, Any]:
     return llm_service.parse_invoice_from_image(file_data, mime_type)
 
 
+def _has_meaningful_fields(fields: Dict[str, Any]) -> bool:
+    """Check if parsed fields contain any meaningful values."""
+    if not fields:
+        return False
+    for value in fields.values():
+        if value is None:
+            continue
+        if isinstance(value, str) and not value.strip():
+            continue
+        return True
+    return False
+
+
 async def process_invoice(invoice_id: int, db: AsyncSession) -> bool:
     """Process an invoice: run OCR and LLM vision in parallel, then compare results.
 
@@ -164,7 +177,7 @@ async def process_invoice(invoice_id: int, db: AsyncSession) -> bool:
 
         # Unpack OCR results
         raw_text, confidence, ocr_fields = ocr_result_data
-        has_llm = bool(llm_fields)
+        has_llm = _has_meaningful_fields(llm_fields)
 
         logger.info(f"OCR completed: {len(ocr_fields)} fields extracted")
         logger.info(f"LLM vision completed: {len(llm_fields)} fields extracted (has_llm={has_llm})")
@@ -205,7 +218,7 @@ async def process_invoice(invoice_id: int, db: AsyncSession) -> bool:
             )
             db.add(llm_result)
         else:
-            logger.warning(f"LLM vision not available - invoice {invoice_id} cannot be auto-confirmed")
+            logger.info(f"LLM vision not available - invoice {invoice_id} using OCR-only flow")
 
         # Compare OCR and LLM results, create diffs
         final_fields, diffs = _compare_and_resolve(ocr_fields, llm_fields, has_llm)
@@ -230,22 +243,28 @@ async def process_invoice(invoice_id: int, db: AsyncSession) -> bool:
         _update_invoice_from_fields(invoice, final_fields)
 
         # Set status based on whether review is needed
-        # LLM comparison is MANDATORY for confirmation
         # Check for conflicts in diffs
         has_conflicts = any(d['needs_review'] for d in diffs)
 
         # Check for missing critical fields (these require review)
-        critical_fields = ['invoice_number', 'issue_date', 'total_with_tax', 'buyer_name', 'seller_name']
-        missing_critical = any(not final_fields.get(f) for f in critical_fields)
+        critical_fields = [
+            'invoice_number',
+            'issue_date',
+            'total_with_tax',
+            'buyer_name',
+            'buyer_tax_id',
+            'seller_name',
+            'seller_tax_id',
+            'item_name',
+        ]
+        missing_fields = [f for f in critical_fields if not final_fields.get(f)]
+        missing_critical = bool(missing_fields)
+        if missing_critical:
+            logger.warning(f"Invoice {invoice_id} missing critical fields: {missing_fields}")
 
-        # LLM is mandatory - if no LLM result, always require review
-        needs_llm_comparison = not has_llm
-
-        needs_review = has_conflicts or missing_critical or needs_llm_comparison
+        needs_review = has_conflicts or missing_critical
         if needs_review:
             invoice.status = InvoiceStatus.REVIEWING
-            if needs_llm_comparison:
-                logger.warning(f"Invoice {invoice_id} requires LLM comparison before confirmation")
         else:
             invoice.status = InvoiceStatus.CONFIRMED
 
