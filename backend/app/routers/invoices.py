@@ -781,7 +781,7 @@ async def confirm_invoice(
     request: Request,
     db: AsyncSession = Depends(get_db)
 ):
-    """确认发票，标记所有差异为已解决。LLM比对是必须的。"""
+    """确认发票，标记所有差异为已解决。"""
     # Get invoice
     invoice_query = select(Invoice).where(Invoice.id == invoice_id)
     invoice_result = await db.execute(invoice_query)
@@ -790,23 +790,35 @@ async def confirm_invoice(
     if not invoice:
         raise HTTPException(status_code=404, detail="发票不存在")
 
-    # Check if LLM result exists - LLM comparison is MANDATORY
+    critical_fields = [
+        "invoice_number",
+        "issue_date",
+        "total_with_tax",
+        "buyer_name",
+        "buyer_tax_id",
+        "seller_name",
+        "seller_tax_id",
+        "item_name",
+    ]
+    missing_fields = [field for field in critical_fields if not getattr(invoice, field)]
+    if missing_fields:
+        raise HTTPException(
+            status_code=400,
+            detail="无法确认：必填字段缺失，请补全后再确认。"
+        )
+
+    # Check if LLM result exists
     llm_query = select(LlmResult).where(LlmResult.invoice_id == invoice_id)
     llm_result = await db.execute(llm_query)
     llm = llm_result.scalar_one_or_none()
-
-    if not llm:
-        raise HTTPException(
-            status_code=400,
-            detail="无法确认：缺少LLM比对结果。请先配置OpenAI API密钥并重新解析发票。"
-        )
+    has_llm = llm is not None
 
     # Get parsing diffs to verify comparison exists
     diffs_query = select(ParsingDiff).where(ParsingDiff.invoice_id == invoice_id)
     diffs_result = await db.execute(diffs_query)
     diffs = diffs_result.scalars().all()
 
-    if not diffs:
+    if has_llm and not diffs:
         raise HTTPException(
             status_code=400,
             detail="无法确认：缺少OCR和LLM的比对结果。请重新解析发票。"
@@ -832,7 +844,11 @@ async def confirm_invoice(
         entity_id=invoice_id,
         action="confirm",
         old_value={"status": old_status},
-        new_value={"status": InvoiceStatus.CONFIRMED.value, "resolved_diffs": len(diffs)},
+        new_value={
+            "status": InvoiceStatus.CONFIRMED.value,
+            "resolved_diffs": len(diffs),
+            "source": "llm" if has_llm else "ocr",
+        },
         ip_address=client_info.get("ip_address"),
         user_agent=client_info.get("user_agent"),
     )

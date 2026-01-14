@@ -3,6 +3,7 @@
 import base64
 import json
 import logging
+import re
 import threading
 from abc import ABC, abstractmethod
 from typing import Optional, Dict, Any
@@ -14,6 +15,7 @@ _llm_lock = threading.Lock()
 from app.services.prompts import (
     INVOICE_VISION_PROMPT,
     INVOICE_VISION_SYSTEM_PROMPT,
+    REQUIRED_FIELDS,
 )
 
 logger = logging.getLogger(__name__)
@@ -532,15 +534,62 @@ class LLMService:
             logger.error(f"LLM vision parsing failed ({provider.get_provider_name()}): {e}")
             return {}
 
+    def _normalize_field_value(self, field_name: str, value: Any) -> Optional[str]:
+        """Normalize and validate a single field value."""
+        if value is None:
+            return None
+
+        if isinstance(value, (int, float)):
+            value = str(value)
+        if not isinstance(value, str):
+            return None
+
+        cleaned = value.strip()
+        if not cleaned:
+            return None
+
+        if field_name in ['total_with_tax', 'amount', 'tax_amount']:
+            cleaned = re.sub(r'[¥￥$€,，\s]', '', cleaned)
+            match = re.search(r'(\d+(?:\.\d{1,2})?)', cleaned)
+            return match.group(1) if match else None
+
+        if field_name == 'issue_date':
+            match = re.search(r'(\d{4})[年/-](\d{1,2})[月/-](\d{1,2})', cleaned)
+            if match:
+                year, month, day = match.groups()
+                return f"{int(year):04d}-{int(month):02d}-{int(day):02d}"
+            if re.fullmatch(r'\d{4}-\d{2}-\d{2}', cleaned):
+                return cleaned
+            return None
+
+        if field_name == 'invoice_number':
+            cleaned = re.sub(r'[\s-]+', '', cleaned)
+            return cleaned if re.fullmatch(r'\d{8,20}', cleaned) else None
+
+        if field_name == 'invoice_code':
+            cleaned = re.sub(r'[\s-]+', '', cleaned)
+            return cleaned if re.fullmatch(r'\d{10,12}', cleaned) else None
+
+        if field_name in ['buyer_tax_id', 'seller_tax_id']:
+            cleaned = re.sub(r'\s+', '', cleaned.upper())
+            return cleaned if re.fullmatch(r'[A-Z0-9]{15,20}', cleaned) else None
+
+        if field_name == 'tax_rate':
+            if cleaned == '免税':
+                return cleaned
+            return cleaned if re.fullmatch(r'\d+%', cleaned) else None
+
+        return cleaned
+
     def _parse_json_response(self, content: str, provider_name: str) -> Dict[str, Any]:
-        """Parse JSON from LLM response, handling markdown code blocks.
+        """Parse JSON from LLM response with schema validation and data cleaning.
 
         Args:
             content: Raw response content from LLM
             provider_name: Name of the provider for logging
 
         Returns:
-            Parsed dictionary of fields
+            Parsed and validated dictionary of fields
         """
         # Try to extract JSON from response
         if content.startswith("```"):
@@ -550,7 +599,14 @@ class LLMService:
                 content = content[4:]
             content = content.strip()
 
-        fields = json.loads(content)
+        raw_fields = json.loads(content)
+        if not isinstance(raw_fields, dict):
+            raise json.JSONDecodeError("LLM response is not a JSON object", content, 0)
+
+        fields: Dict[str, Optional[str]] = {}
+        for field in REQUIRED_FIELDS:
+            fields[field] = self._normalize_field_value(field, raw_fields.get(field))
+
         logger.info(f"LLM ({provider_name}) extracted fields: {list(fields.keys())}")
         return fields
 

@@ -2,7 +2,7 @@ version: '3.8'
 
 services:
   db:
-    image: postgres:15-alpine
+    image: postgres:16-alpine
     container_name: invoice_db
     environment:
       POSTGRES_USER: postgres
@@ -32,11 +32,11 @@ services:
       - ./backend:/app
       - paddleocr_models:/root/.paddleocr
     ports:
-      - "8000:8000"
+      - "18080:18080"
     depends_on:
       db:
         condition: service_healthy
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    command: uvicorn app.main:app --host 0.0.0.0 --port 18080 --reload
 
   frontend:
     build:
@@ -47,11 +47,11 @@ services:
       - ./frontend:/app
       - /app/node_modules
     ports:
-      - "5173:5173"
+      - "15173:15173"
     depends_on:
       - backend
     environment:
-      - VITE_API_URL=http://backend:8000
+      - VITE_API_URL=http://backend:18080
 
 volumes:
   postgres_data:

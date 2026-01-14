@@ -29,7 +29,7 @@ async def rate_limit_handler(request: Request, exc: RateLimitExceeded):
 # CORS configuration
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://localhost:5173"],
+    allow_origins=["http://localhost:3000", "http://localhost:15173"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

@@ -9,6 +9,7 @@ import type {
   LLMConfigRequest,
   LLMConfigResponse,
   LLMTestResponse,
+  ModelsResponse,
 } from '../types/invoice';
 
 const api = axios.create({
@@ -183,6 +184,22 @@ export const configureLLM = async (
 // Test LLM connection
 export const testLLMConnection = async (): Promise<LLMTestResponse> => {
   const response = await api.post('/settings/llm/test');
+  return response.data;
+};
+
+// Get available models for a provider
+export const getAvailableModels = async (
+  provider?: string,
+  visionOnly: boolean = false
+): Promise<ModelsResponse> => {
+  const params: Record<string, string | boolean> = {};
+  if (provider) {
+    params.provider = provider;
+  }
+  if (visionOnly) {
+    params.vision_only = true;
+  }
+  const response = await api.get('/settings/models', { params });
   return response.data;
 };
 
