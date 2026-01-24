@@ -41,6 +41,11 @@
   background-color: var(--border);
 }
 
+.backButton:focus-visible {
+  outline: 2px solid var(--black-primary);
+  outline-offset: 2px;
+}
+
 .headerTitle {
   display: flex;
   flex-direction: column;
@@ -83,6 +88,11 @@
   color: var(--error);
 }
 
+.rejectButton:focus-visible {
+  outline: 2px solid var(--error);
+  outline-offset: 2px;
+}
+
 .confirmButton {
   padding: var(--spacing-sm) var(--spacing-base);
   background-color: var(--black-primary);
@@ -98,6 +108,11 @@
 .confirmButton:hover {
   background-color: #2D2D2D;
   border-color: #2D2D2D;
+}
+
+.confirmButton:focus-visible {
+  outline: 2px solid var(--black-primary);
+  outline-offset: 2px;
 }
 
 /* Content Body */
@@ -319,6 +334,11 @@
   background-color: var(--border);
 }
 
+.zoomButton:focus-visible {
+  outline: 2px solid var(--black-primary);
+  outline-offset: 2px;
+}
+
 .downloadButton {
   display: flex;
   align-items: center;
@@ -336,6 +356,11 @@
 
 .downloadButton:hover {
   background-color: var(--border);
+}
+
+.downloadButton:focus-visible {
+  outline: 2px solid var(--black-primary);
+  outline-offset: 2px;
 }
 
 .previewBody {

@@ -175,9 +175,12 @@ export const getLLMStatus = async (): Promise<LLMStatusResponse> => {
 
 // Configure LLM provider
 export const configureLLM = async (
-  config: LLMConfigRequest
+  config: LLMConfigRequest,
+  configToken?: string
 ): Promise<LLMConfigResponse> => {
-  const response = await api.post('/settings/llm/configure', config);
+  const response = await api.post('/settings/llm/configure', config, {
+    headers: configToken ? { 'X-LLM-Config-Token': configToken } : undefined,
+  });
   return response.data;
 };
 

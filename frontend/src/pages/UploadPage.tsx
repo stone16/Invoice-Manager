@@ -82,11 +82,11 @@ function UploadPage() {
         <div className={styles.uploadCard}>
           <div className={styles.uploadDropzone}>
             <Dragger {...uploadProps}>
-              <p className="ant-upload-drag-icon">
-                <div className={styles.uploadIcon}>
+              <div className="ant-upload-drag-icon">
+                <span className={styles.uploadIcon}>
                   <UploadOutlined />
-                </div>
-              </p>
+                </span>
+              </div>
               <p className="ant-upload-text">点击或拖拽文件到此区域上传</p>
               <p className="ant-upload-hint">
                 支持 PDF、JPG、PNG 格式，单个文件最大 10MB，支持批量上传

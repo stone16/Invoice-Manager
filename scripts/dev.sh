@@ -75,6 +75,14 @@ CUSTOM_PORT=""
 while [[ $# -gt 0 ]]; do
     case $1 in
         --port)
+            if [[ -z "${2:-}" ]]; then
+                echo "Missing value for --port"
+                exit 1
+            fi
+            if ! [[ "$2" =~ ^[0-9]+$ ]]; then
+                echo "Port must be numeric"
+                exit 1
+            fi
             CUSTOM_PORT="$2"
             shift 2
             ;;
@@ -103,6 +111,15 @@ if [[ -n "$CUSTOM_PORT" ]]; then
     API_PORT="$CUSTOM_PORT"
     OFFSET=$((CUSTOM_PORT - 18080))
     VITE_PORT=$((15173 + OFFSET))
+
+    if (( API_PORT < 18081 || API_PORT > 18089 )); then
+        echo -e "${RED}[ERROR] Backend port must be between 18081-18089${NC}"
+        exit 1
+    fi
+    if (( VITE_PORT < 15174 || VITE_PORT > 15182 )); then
+        echo -e "${RED}[ERROR] Frontend port must be between 15174-15182${NC}"
+        exit 1
+    fi
 
     # Verify custom ports are available
     if ! is_port_available "$API_PORT"; then

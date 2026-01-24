@@ -5,7 +5,7 @@ import os
 from pathlib import Path
 from typing import Optional, List
 from pydantic import BaseModel
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Header
 
 logger = logging.getLogger(__name__)
 
@@ -57,6 +57,27 @@ def _update_env_file(updates: dict[str, str]) -> None:
         f.writelines(new_lines)
 
     logger.info(f"Updated .env file with keys: {list(updates.keys())}")
+
+
+def _require_llm_config_token(
+    required_token: str,
+    header_token: Optional[str],
+    authorization: Optional[str],
+) -> None:
+    """Verify LLM config token when configured via env."""
+    if not required_token:
+        return
+
+    candidate = header_token
+    if not candidate and authorization:
+        auth_value = authorization.strip()
+        if auth_value.lower().startswith("bearer "):
+            candidate = auth_value[7:].strip()
+        else:
+            candidate = auth_value
+
+    if not candidate or candidate != required_token:
+        raise HTTPException(status_code=401, detail="未授权")
 
 from app.config import get_settings, clear_settings_cache
 from app.services.llm_service import get_llm_service, reset_llm_service, PROVIDERS
@@ -148,9 +169,19 @@ async def get_llm_status():
 
 
 @router.post("/llm/configure", response_model=LLMConfigResponse)
-async def configure_llm(request: LLMConfigRequest):
+async def configure_llm(
+    request: LLMConfigRequest,
+    x_llm_config_token: Optional[str] = Header(default=None, alias="X-LLM-Config-Token"),
+    authorization: Optional[str] = Header(default=None),
+):
     """Configure an LLM provider and persist to .env file."""
     provider = request.provider.lower()
+
+    _require_llm_config_token(
+        os.environ.get("LLM_CONFIG_TOKEN", ""),
+        x_llm_config_token,
+        authorization,
+    )
 
     if provider not in PROVIDERS:
         raise HTTPException(

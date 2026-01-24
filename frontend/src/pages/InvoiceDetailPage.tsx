@@ -220,7 +220,7 @@ function InvoiceDetailPage() {
           </div>
         </div>
         <div className={styles.headerActions}>
-          <button className={styles.rejectButton}>
+          <button className={styles.rejectButton} disabled title="功能开发中">
             拒绝
           </button>
           <button className={styles.confirmButton} onClick={handleConfirmAll}>
