@@ -45,6 +45,36 @@ def _model_matches_vision_pattern(model_name: str, vision_patterns: list[str]) -
     return False
 
 
+def _model_uses_new_token_param(model_name: str) -> bool:
+    """Check if a model uses max_completion_tokens instead of max_tokens.
+
+    Newer OpenAI models (o1, o3, gpt-5.x) require max_completion_tokens parameter.
+
+    Args:
+        model_name: The model name
+
+    Returns:
+        True if the model uses max_completion_tokens
+    """
+    new_format_prefixes = ["o1", "o3", "gpt-5"]
+    return any(model_name.startswith(prefix) for prefix in new_format_prefixes)
+
+
+def _get_max_tokens_param(model_name: str, value: int) -> dict:
+    """Get the correct max tokens parameter for a model.
+
+    Args:
+        model_name: The model name
+        value: The max tokens value
+
+    Returns:
+        Dict with the appropriate parameter name and value
+    """
+    if _model_uses_new_token_param(model_name):
+        return {"max_completion_tokens": value}
+    return {"max_tokens": value}
+
+
 class BaseLLMProvider(ABC):
     """Base class for LLM providers."""
 
@@ -86,7 +116,8 @@ class OpenAIProvider(BaseLLMProvider):
     """OpenAI/OpenAI-compatible provider."""
 
     # Models that support vision
-    VISION_MODELS = ["gpt-4o", "gpt-4o-mini", "gpt-4-turbo", "gpt-4-vision-preview"]
+    # Note: gpt-5 and o-series models also support vision/multimodal input
+    VISION_MODELS = ["gpt-4o", "gpt-4o-mini", "gpt-4-turbo", "gpt-4-vision-preview", "gpt-5", "o1", "o3"]
 
     def __init__(self):
         self._client = None
@@ -114,21 +145,23 @@ class OpenAIProvider(BaseLLMProvider):
         return _model_matches_vision_pattern(settings.openai_model, self.VISION_MODELS)
 
     def chat_completion(self, system_prompt: str, user_prompt: str) -> str:
+        model = settings.openai_model
         response = self.client.chat.completions.create(
-            model=settings.openai_model,
+            model=model,
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt}
             ],
             temperature=0.1,
-            max_tokens=1000,
+            **_get_max_tokens_param(model, 1000),
         )
         return response.choices[0].message.content.strip()
 
     def vision_completion(self, system_prompt: str, user_prompt: str, image_data: bytes, mime_type: str = "image/png") -> str:
+        model = settings.openai_model
         base64_image = base64.b64encode(image_data).decode("utf-8")
         response = self.client.chat.completions.create(
-            model=settings.openai_model,
+            model=model,
             messages=[
                 {"role": "system", "content": system_prompt},
                 {
@@ -143,7 +176,7 @@ class OpenAIProvider(BaseLLMProvider):
                 }
             ],
             temperature=0.1,
-            max_tokens=1500,
+            **_get_max_tokens_param(model, 1500),
         )
         return response.choices[0].message.content.strip()
 
@@ -379,7 +412,7 @@ class ZhipuProvider(BaseLLMProvider):
     """Zhipu GLM provider."""
 
     # GLM-4V models support vision
-    VISION_MODELS = ["glm-4v"]
+    VISION_MODELS = ["glm-4v", "glm-4v-plus"]
 
     def __init__(self):
         self._client = None
@@ -464,17 +497,23 @@ class LLMService:
 
     @property
     def active_provider(self) -> Optional[BaseLLMProvider]:
-        """Get the active LLM provider."""
+        """Get the active LLM provider.
+
+        Always fetch fresh settings to ensure config changes are reflected.
+        """
         if self._active_provider is None:
-            provider_name = settings.get_active_llm_provider()
+            provider_name = get_settings().get_active_llm_provider()
             if provider_name:
                 self._active_provider = self._get_provider(provider_name)
         return self._active_provider
 
     @property
     def is_available(self) -> bool:
-        """Check if any LLM provider is available."""
-        return settings.is_llm_configured()
+        """Check if any LLM provider is available.
+
+        Always fetch fresh settings to ensure config changes are reflected.
+        """
+        return get_settings().is_llm_configured()
 
     def get_configured_providers(self) -> list[str]:
         """Get list of configured provider names."""
@@ -487,7 +526,7 @@ class LLMService:
 
     def get_active_provider_name(self) -> Optional[str]:
         """Get the name of the active provider."""
-        return settings.get_active_llm_provider()
+        return get_settings().get_active_llm_provider()
 
     def supports_vision(self) -> bool:
         """Check if the active provider supports vision/image input."""
@@ -627,7 +666,13 @@ def get_llm_service() -> LLMService:
 
 
 def reset_llm_service():
-    """Reset the LLM service singleton (useful after config changes)."""
-    global _llm_service
+    """Reset the LLM service singleton (useful after config changes).
+
+    Also refreshes the module-level settings to ensure providers
+    see the updated configuration.
+    """
+    global _llm_service, settings
     with _llm_lock:
         _llm_service = None
+        # Refresh module-level settings so providers see new config
+        settings = get_settings()

@@ -1,0 +1,36 @@
+/* Status Tag Component */
+.statusTag {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px var(--spacing-sm);
+  border-radius: var(--radius-base);
+  font-family: var(--font-secondary);
+  font-size: 11px;
+  font-weight: var(--font-weight-medium);
+  line-height: 1.4;
+}
+
+.statusTag.pending {
+  background-color: #FFF7ED;
+  color: var(--warning-dark);
+}
+
+.statusTag.processing {
+  background-color: #EFF6FF;
+  color: var(--info-dark);
+}
+
+.statusTag.success {
+  background-color: #F0FDF4;
+  color: var(--success-dark);
+}
+
+.statusTag.warning {
+  background-color: #FFFBEB;
+  color: var(--warning-dark);
+}
+
+.statusTag.error {
+  background-color: #FEF2F2;
+  color: var(--error-dark);
+}

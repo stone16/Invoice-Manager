@@ -1,0 +1,263 @@
+/* Ant Design Theme Overrides for Invoice Manager */
+
+/* ================ BUTTONS ================ */
+/* Primary Button - Red brand color */
+.ant-btn-primary {
+  background-color: var(--red-primary) !important;
+  border-color: var(--red-primary) !important;
+  font-family: var(--font-secondary);
+  font-weight: var(--font-weight-medium);
+  border-radius: var(--radius-base);
+}
+
+.ant-btn-primary:hover,
+.ant-btn-primary:focus {
+  background-color: #C41E10 !important;
+  border-color: #C41E10 !important;
+}
+
+/* Default Button */
+.ant-btn-default {
+  border-color: var(--border);
+  color: var(--foreground);
+  font-family: var(--font-secondary);
+  font-weight: var(--font-weight-medium);
+  border-radius: var(--radius-base);
+}
+
+.ant-btn-default:hover,
+.ant-btn-default:focus {
+  border-color: var(--red-primary);
+  color: var(--red-primary);
+}
+
+/* ================ TABLE ================ */
+.ant-table {
+  font-family: var(--font-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-base);
+  overflow: hidden;
+}
+
+.ant-table-thead > tr > th {
+  background-color: var(--surface) !important;
+  color: var(--muted-foreground);
+  font-weight: var(--font-weight-medium);
+  font-size: var(--font-size-sm);
+  padding: 14px 20px !important;
+  border-bottom: 1px solid var(--border);
+}
+
+.ant-table-tbody > tr > td {
+  padding: 16px 20px !important;
+  border-bottom: 1px solid var(--border);
+  font-size: var(--font-size-base);
+  color: var(--foreground);
+}
+
+.ant-table-tbody > tr:hover > td {
+  background-color: var(--surface) !important;
+}
+
+.ant-table-tbody > tr:last-child > td {
+  border-bottom: none;
+}
+
+/* Table Row Selection */
+.ant-table-tbody > tr.ant-table-row-selected > td {
+  background-color: rgba(228, 35, 19, 0.05) !important;
+}
+
+/* ================ INPUT ================ */
+.ant-input,
+.ant-input-affix-wrapper {
+  font-family: var(--font-secondary);
+  border-radius: var(--radius-base);
+  border-color: var(--border);
+  padding: 8px 12px;
+}
+
+.ant-input:hover,
+.ant-input-affix-wrapper:hover {
+  border-color: var(--gray-400);
+}
+
+.ant-input:focus,
+.ant-input-affix-wrapper:focus,
+.ant-input-affix-wrapper-focused {
+  border-color: var(--red-primary);
+  box-shadow: 0 0 0 2px rgba(228, 35, 19, 0.1);
+}
+
+/* ================ SELECT ================ */
+.ant-select-selector {
+  font-family: var(--font-secondary);
+  border-radius: var(--radius-base) !important;
+  border-color: var(--border) !important;
+}
+
+.ant-select:hover .ant-select-selector {
+  border-color: var(--gray-400) !important;
+}
+
+.ant-select-focused .ant-select-selector {
+  border-color: var(--red-primary) !important;
+  box-shadow: 0 0 0 2px rgba(228, 35, 19, 0.1) !important;
+}
+
+/* ================ TAG / BADGE ================ */
+.ant-tag {
+  font-family: var(--font-secondary);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  border-radius: var(--radius-full);
+  padding: 2px 10px;
+  border: none;
+}
+
+/* Status Tags */
+.ant-tag-success,
+.ant-tag-green {
+  background-color: rgba(34, 197, 94, 0.1);
+  color: var(--success-dark);
+}
+
+.ant-tag-warning,
+.ant-tag-orange {
+  background-color: rgba(245, 158, 11, 0.1);
+  color: var(--warning-dark);
+}
+
+.ant-tag-error,
+.ant-tag-red {
+  background-color: rgba(239, 68, 68, 0.1);
+  color: var(--error-dark);
+}
+
+.ant-tag-processing,
+.ant-tag-blue {
+  background-color: rgba(59, 130, 246, 0.1);
+  color: var(--info-dark);
+}
+
+/* ================ PAGINATION ================ */
+.ant-pagination {
+  font-family: var(--font-secondary);
+}
+
+.ant-pagination-item {
+  border-radius: var(--radius-base);
+  border-color: var(--border);
+}
+
+.ant-pagination-item:hover {
+  border-color: var(--red-primary);
+}
+
+.ant-pagination-item:hover a {
+  color: var(--red-primary);
+}
+
+.ant-pagination-item-active {
+  border-color: var(--red-primary);
+  background-color: var(--red-primary);
+}
+
+.ant-pagination-item-active a {
+  color: var(--background);
+}
+
+.ant-pagination-item-active:hover a {
+  color: var(--background);
+}
+
+/* ================ MODAL ================ */
+.ant-modal-content {
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+
+.ant-modal-header {
+  border-bottom: 1px solid var(--border);
+}
+
+.ant-modal-title {
+  font-family: var(--font-primary);
+  font-weight: var(--font-weight-semibold);
+  font-size: var(--font-size-lg);
+}
+
+.ant-modal-footer {
+  border-top: 1px solid var(--border);
+}
+
+/* ================ CARD ================ */
+.ant-card {
+  border-radius: var(--radius-base);
+  border-color: var(--border);
+}
+
+.ant-card-head {
+  border-bottom-color: var(--border);
+}
+
+.ant-card-head-title {
+  font-family: var(--font-primary);
+  font-weight: var(--font-weight-semibold);
+}
+
+/* ================ MENU ================ */
+.ant-menu {
+  font-family: var(--font-secondary);
+}
+
+/* ================ BREADCRUMB ================ */
+.ant-breadcrumb {
+  font-family: var(--font-secondary);
+}
+
+.ant-breadcrumb a {
+  color: var(--muted-foreground);
+}
+
+.ant-breadcrumb a:hover {
+  color: var(--red-primary);
+}
+
+/* ================ UPLOAD ================ */
+.ant-upload-drag {
+  border-radius: var(--radius-lg) !important;
+  border-color: var(--border) !important;
+  border-style: dashed !important;
+  background-color: var(--surface) !important;
+}
+
+.ant-upload-drag:hover {
+  border-color: var(--red-primary) !important;
+}
+
+.ant-upload-drag-icon .anticon {
+  color: var(--red-primary) !important;
+}
+
+/* ================ MESSAGE / NOTIFICATION ================ */
+.ant-message {
+  font-family: var(--font-secondary);
+}
+
+.ant-notification {
+  font-family: var(--font-secondary);
+}
+
+/* ================ FORM ================ */
+.ant-form-item-label > label {
+  font-family: var(--font-secondary);
+  font-weight: var(--font-weight-medium);
+  color: var(--foreground);
+}
+
+/* ================ ALERT ================ */
+.ant-alert {
+  border-radius: var(--radius-base);
+  font-family: var(--font-secondary);
+}

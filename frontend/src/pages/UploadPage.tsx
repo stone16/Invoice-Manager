@@ -1,13 +1,13 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Card, Upload, Button, message, List, Tag, Typography } from 'antd';
-import { InboxOutlined, CheckCircleOutlined, CloseCircleOutlined } from '@ant-design/icons';
+import { Upload, message, List, Tag } from 'antd';
+import { UploadOutlined, CheckCircleOutlined, CloseCircleOutlined } from '@ant-design/icons';
 import type { UploadFile } from 'antd/es/upload/interface';
 import { uploadInvoices } from '../services/api';
 import type { UploadResponse } from '../types/invoice';
+import styles from './UploadPage.module.css';
 
 const { Dragger } = Upload;
-const { Title } = Typography;
 
 function UploadPage() {
   const navigate = useNavigate();
@@ -73,67 +73,78 @@ function UploadPage() {
   };
 
   return (
-    <div style={{ maxWidth: 800, margin: '0 auto' }}>
-      <Card>
-        <Title level={4}>上传发票</Title>
+    <div className={styles.pageContainer}>
+      <div className={styles.contentWrapper}>
+        <header className={styles.pageHeader}>
+          <h1 className={styles.pageTitle}>上传发票</h1>
+        </header>
 
-        <Dragger {...uploadProps} style={{ marginBottom: 24 }}>
-          <p className="ant-upload-drag-icon">
-            <InboxOutlined />
-          </p>
-          <p className="ant-upload-text">点击或拖拽文件到此区域上传</p>
-          <p className="ant-upload-hint">
-            支持 PDF、JPG、PNG 格式，单个文件最大 10MB，支持批量上传
-          </p>
-        </Dragger>
+        <div className={styles.uploadCard}>
+          <div className={styles.uploadDropzone}>
+            <Dragger {...uploadProps}>
+              <p className="ant-upload-drag-icon">
+                <div className={styles.uploadIcon}>
+                  <UploadOutlined />
+                </div>
+              </p>
+              <p className="ant-upload-text">点击或拖拽文件到此区域上传</p>
+              <p className="ant-upload-hint">
+                支持 PDF、JPG、PNG 格式，单个文件最大 10MB，支持批量上传
+              </p>
+            </Dragger>
+          </div>
 
-        <div style={{ display: 'flex', gap: 16 }}>
-          <Button
-            type="primary"
-            onClick={handleUpload}
-            loading={uploading}
-            disabled={fileList.length === 0}
-          >
-            {uploading ? '上传中...' : '开始上传'}
-          </Button>
-          <Button onClick={() => navigate('/')}>
-            返回列表
-          </Button>
+          <div className={styles.actionButtons}>
+            <button
+              className={styles.uploadButton}
+              onClick={handleUpload}
+              disabled={fileList.length === 0 || uploading}
+            >
+              {uploading ? '上传中...' : '开始上传'}
+            </button>
+            <button
+              className={styles.backButton}
+              onClick={() => navigate('/')}
+            >
+              返回列表
+            </button>
+          </div>
         </div>
-      </Card>
 
-      {results.length > 0 && (
-        <Card title="上传结果" style={{ marginTop: 24 }}>
-          <List
-            dataSource={results}
-            renderItem={(item) => (
-              <List.Item>
-                <List.Item.Meta
-                  avatar={
-                    item.status === 'success' ? (
-                      <CheckCircleOutlined style={{ color: '#52c41a', fontSize: 24 }} />
-                    ) : (
-                      <CloseCircleOutlined style={{ color: '#ff4d4f', fontSize: 24 }} />
-                    )
-                  }
-                  title={item.file_name}
-                  description={item.message}
-                />
-                {item.status === 'success' && (
-                  <Tag color="success">ID: {item.id}</Tag>
-                )}
-              </List.Item>
-            )}
-          />
-          <Button
-            type="primary"
-            onClick={() => navigate('/')}
-            style={{ marginTop: 16 }}
-          >
-            查看发票列表
-          </Button>
-        </Card>
-      )}
+        {results.length > 0 && (
+          <div className={styles.resultsCard}>
+            <h2 className={styles.resultsTitle}>上传结果</h2>
+            <List
+              className={styles.resultsList}
+              dataSource={results}
+              renderItem={(item) => (
+                <List.Item>
+                  <List.Item.Meta
+                    avatar={
+                      item.status === 'success' ? (
+                        <CheckCircleOutlined style={{ color: '#52c41a', fontSize: 24 }} />
+                      ) : (
+                        <CloseCircleOutlined style={{ color: '#ff4d4f', fontSize: 24 }} />
+                      )
+                    }
+                    title={item.file_name}
+                    description={item.message}
+                  />
+                  {item.status === 'success' && (
+                    <Tag color="success">ID: {item.id}</Tag>
+                  )}
+                </List.Item>
+              )}
+            />
+            <button
+              className={styles.viewListButton}
+              onClick={() => navigate('/')}
+            >
+              查看发票列表
+            </button>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

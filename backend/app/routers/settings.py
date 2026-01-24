@@ -2,11 +2,61 @@
 
 import logging
 import os
+from pathlib import Path
 from typing import Optional, List
 from pydantic import BaseModel
 from fastapi import APIRouter, HTTPException
 
 logger = logging.getLogger(__name__)
+
+
+def _update_env_file(updates: dict[str, str]) -> None:
+    """Update .env file with new key-value pairs.
+
+    Preserves existing entries and comments, updates existing keys,
+    and appends new keys at the end.
+    """
+    env_path = Path(__file__).parent.parent.parent / ".env"
+
+    # Read existing content
+    existing_lines = []
+    existing_keys = set()
+    if env_path.exists():
+        with open(env_path, "r") as f:
+            for line in f:
+                stripped = line.strip()
+                # Track existing keys (ignore comments and empty lines)
+                if stripped and not stripped.startswith("#") and "=" in stripped:
+                    key = stripped.split("=", 1)[0].strip()
+                    existing_keys.add(key)
+                existing_lines.append(line)
+
+    # Update existing lines or mark keys as handled
+    updated_keys = set()
+    new_lines = []
+    for line in existing_lines:
+        stripped = line.strip()
+        if stripped and not stripped.startswith("#") and "=" in stripped:
+            key = stripped.split("=", 1)[0].strip()
+            if key in updates:
+                # Replace this line with updated value
+                new_lines.append(f"{key}={updates[key]}\n")
+                updated_keys.add(key)
+            else:
+                new_lines.append(line)
+        else:
+            new_lines.append(line)
+
+    # Append new keys that weren't in the file
+    for key, value in updates.items():
+        if key not in updated_keys:
+            new_lines.append(f"{key}={value}\n")
+
+    # Write back
+    with open(env_path, "w") as f:
+        f.writelines(new_lines)
+
+    logger.info(f"Updated .env file with keys: {list(updates.keys())}")
 
 from app.config import get_settings, clear_settings_cache
 from app.services.llm_service import get_llm_service, reset_llm_service, PROVIDERS
@@ -99,11 +149,7 @@ async def get_llm_status():
 
 @router.post("/llm/configure", response_model=LLMConfigResponse)
 async def configure_llm(request: LLMConfigRequest):
-    """Configure an LLM provider by setting environment variables.
-
-    Note: This sets environment variables for the current process.
-    For persistence, add these to your .env file.
-    """
+    """Configure an LLM provider and persist to .env file."""
     provider = request.provider.lower()
 
     if provider not in PROVIDERS:
@@ -116,45 +162,32 @@ async def configure_llm(request: LLMConfigRequest):
         raise HTTPException(status_code=400, detail="API密钥不能为空")
 
     try:
-        # Set environment variables based on provider
-        if provider == "openai":
-            os.environ["OPENAI_API_KEY"] = request.api_key
-            if request.model:
-                os.environ["OPENAI_MODEL"] = request.model
-            if request.base_url:
-                os.environ["OPENAI_BASE_URL"] = request.base_url
+        # Build env updates for both os.environ and .env file
+        env_updates: dict[str, str] = {"LLM_PROVIDER": provider}
 
-        elif provider == "anthropic":
-            os.environ["ANTHROPIC_API_KEY"] = request.api_key
-            if request.model:
-                os.environ["ANTHROPIC_MODEL"] = request.model
+        # Provider-specific configuration
+        provider_config = {
+            "openai": ("OPENAI_API_KEY", "OPENAI_MODEL", "OPENAI_BASE_URL"),
+            "anthropic": ("ANTHROPIC_API_KEY", "ANTHROPIC_MODEL", None),
+            "google": ("GOOGLE_API_KEY", "GOOGLE_MODEL", None),
+            "qwen": ("QWEN_API_KEY", "QWEN_MODEL", "QWEN_BASE_URL"),
+            "deepseek": ("DEEPSEEK_API_KEY", "DEEPSEEK_MODEL", "DEEPSEEK_BASE_URL"),
+            "zhipu": ("ZHIPU_API_KEY", "ZHIPU_MODEL", None),
+        }
 
-        elif provider == "google":
-            os.environ["GOOGLE_API_KEY"] = request.api_key
-            if request.model:
-                os.environ["GOOGLE_MODEL"] = request.model
+        key_name, model_name, base_url_name = provider_config[provider]
+        env_updates[key_name] = request.api_key
+        if request.model:
+            env_updates[model_name] = request.model
+        if request.base_url and base_url_name:
+            env_updates[base_url_name] = request.base_url
 
-        elif provider == "qwen":
-            os.environ["QWEN_API_KEY"] = request.api_key
-            if request.model:
-                os.environ["QWEN_MODEL"] = request.model
-            if request.base_url:
-                os.environ["QWEN_BASE_URL"] = request.base_url
+        # Set environment variables for current process
+        for key, value in env_updates.items():
+            os.environ[key] = value
 
-        elif provider == "deepseek":
-            os.environ["DEEPSEEK_API_KEY"] = request.api_key
-            if request.model:
-                os.environ["DEEPSEEK_MODEL"] = request.model
-            if request.base_url:
-                os.environ["DEEPSEEK_BASE_URL"] = request.base_url
-
-        elif provider == "zhipu":
-            os.environ["ZHIPU_API_KEY"] = request.api_key
-            if request.model:
-                os.environ["ZHIPU_MODEL"] = request.model
-
-        # Set this as the active provider
-        os.environ["LLM_PROVIDER"] = provider
+        # Persist to .env file for restart persistence
+        _update_env_file(env_updates)
 
         # Clear caches to reload settings
         clear_settings_cache()

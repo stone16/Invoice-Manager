@@ -1,0 +1,171 @@
+.pageContainer {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2xl);
+}
+
+/* Page Header */
+.pageHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding-bottom: var(--spacing-xl);
+  border-bottom: 1px solid var(--border);
+}
+
+.headerContent {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+}
+
+.pageTitle {
+  font-family: var(--font-primary);
+  font-size: 32px;
+  font-weight: var(--font-weight-semibold);
+  color: var(--foreground);
+  margin: 0;
+  line-height: var(--line-height-tight);
+}
+
+.pageSubtitle {
+  font-family: var(--font-secondary);
+  font-size: var(--font-size-base);
+  color: var(--muted-foreground);
+  margin: 0;
+  line-height: var(--line-height-normal);
+}
+
+.headerActions {
+  display: flex;
+  gap: var(--spacing-md);
+  align-items: center;
+}
+
+.secondaryButton {
+  background-color: var(--background);
+  border: 1px solid var(--border);
+  color: var(--foreground);
+}
+
+.secondaryButton:hover {
+  background-color: var(--surface);
+  border-color: var(--gray-400);
+}
+
+.primaryButton {
+  background-color: var(--black-primary);
+  color: var(--background);
+  border: none;
+}
+
+.primaryButton:hover {
+  background-color: #1a1a1a;
+}
+
+/* Metrics Section */
+.metricsSection {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--spacing-xl);
+}
+
+/* Additional Controls */
+.additionalControls {
+  display: flex;
+  gap: var(--spacing-md);
+  flex-wrap: wrap;
+  align-items: center;
+  padding: var(--spacing-base) 0;
+}
+
+/* Table Container */
+.tableContainer {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-base);
+  overflow: hidden;
+}
+
+.invoiceTable :global(.ant-table-thead > tr > th) {
+  background-color: var(--surface);
+  padding: 14px 20px;
+  font-family: var(--font-secondary);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--foreground);
+}
+
+.invoiceTable :global(.ant-table-tbody > tr > td) {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+  font-family: var(--font-secondary);
+  font-size: var(--font-size-sm);
+  color: var(--foreground);
+}
+
+.invoiceTable :global(.ant-table-tbody > tr:last-child > td) {
+  border-bottom: none;
+}
+
+.invoiceTable :global(.ant-table-tbody > tr:hover > td) {
+  background-color: var(--surface);
+}
+
+/* Pagination Row */
+.paginationRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--spacing-base) var(--spacing-xl);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-base);
+  height: 56px;
+}
+
+.paginationLeft {
+  display: flex;
+  align-items: center;
+}
+
+.paginationText {
+  font-family: var(--font-secondary);
+  font-size: var(--font-size-sm);
+  color: var(--muted-foreground);
+}
+
+.paginationRight {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+}
+
+.pageNumbers {
+  font-family: var(--font-secondary);
+  font-size: var(--font-size-sm);
+  color: var(--foreground);
+  padding: 0 var(--spacing-md);
+}
+
+/* Responsive Design */
+@media (max-width: 1200px) {
+  .metricsSection {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 768px) {
+  .pageHeader {
+    flex-direction: column;
+    gap: var(--spacing-base);
+  }
+
+  .metricsSection {
+    grid-template-columns: 1fr;
+  }
+
+  .paginationRow {
+    flex-direction: column;
+    height: auto;
+    gap: var(--spacing-base);
+  }
+}

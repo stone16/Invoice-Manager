@@ -1,0 +1,189 @@
+/* Upload Page Styles - matching .pen design specifications */
+
+.pageContainer {
+  padding: 48px 64px;
+  background: var(--surface);
+  min-height: 100vh;
+}
+
+.contentWrapper {
+  max-width: 800px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2xl);
+}
+
+.pageHeader {
+  margin: 0 0 var(--spacing-xl) 0;
+}
+
+.pageTitle {
+  font-family: var(--font-secondary);
+  font-size: var(--font-size-2xl);
+  font-weight: var(--font-weight-semibold);
+  color: var(--foreground);
+  margin: 0;
+  line-height: var(--line-height-tight);
+}
+
+.uploadCard {
+  background: var(--background);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border);
+  padding: var(--spacing-xl);
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xl);
+}
+
+/* Custom Dragger Styling */
+.uploadDropzone :global(.ant-upload-drag) {
+  border: 2px dashed var(--border);
+  border-radius: var(--radius-lg);
+  background: transparent;
+  transition: all var(--transition-base);
+}
+
+.uploadDropzone :global(.ant-upload-drag:hover) {
+  border-color: var(--black-primary);
+}
+
+.uploadDropzone :global(.ant-upload-drag-container) {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-base);
+  padding: var(--spacing-4xl) var(--spacing-xl);
+}
+
+/* Upload Icon */
+.uploadDropzone :global(.ant-upload-drag-icon) {
+  margin-bottom: 0;
+}
+
+.uploadIcon {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: #F3F4F6;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto;
+}
+
+.uploadIcon :global(.anticon) {
+  font-size: 28px;
+  color: var(--foreground);
+}
+
+/* Upload Text */
+.uploadDropzone :global(.ant-upload-text) {
+  font-family: var(--font-secondary);
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-medium);
+  color: var(--foreground);
+  margin: 0;
+}
+
+.uploadDropzone :global(.ant-upload-hint) {
+  font-family: var(--font-secondary);
+  font-size: var(--font-size-base);
+  color: var(--muted-foreground);
+  margin: 0;
+}
+
+/* Action Buttons */
+.actionButtons {
+  display: flex;
+  gap: var(--spacing-md);
+}
+
+.uploadButton {
+  height: 40px;
+  padding: 0 24px;
+  border-radius: var(--radius-base);
+  font-family: var(--font-secondary);
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-medium);
+  border: none;
+  cursor: pointer;
+  transition: all var(--transition-base);
+  background: var(--black-primary);
+  color: var(--background);
+}
+
+.uploadButton:hover:not(:disabled) {
+  opacity: 0.85;
+}
+
+.uploadButton:disabled {
+  background: var(--border);
+  color: var(--muted-foreground);
+  cursor: not-allowed;
+}
+
+.backButton {
+  height: 40px;
+  padding: 0 24px;
+  border-radius: var(--radius-base);
+  font-family: var(--font-secondary);
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-medium);
+  background: var(--background);
+  color: var(--foreground);
+  border: 1px solid var(--border);
+  cursor: pointer;
+  transition: all var(--transition-base);
+}
+
+.backButton:hover {
+  border-color: var(--black-primary);
+  color: var(--black-primary);
+}
+
+/* Results Card */
+.resultsCard {
+  background: var(--background);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border);
+  padding: var(--spacing-xl);
+}
+
+.resultsTitle {
+  font-family: var(--font-secondary);
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-semibold);
+  color: var(--foreground);
+  margin: 0 0 var(--spacing-base) 0;
+}
+
+.resultsList :global(.ant-list-item) {
+  padding: var(--spacing-base) 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.resultsList :global(.ant-list-item:last-child) {
+  border-bottom: none;
+}
+
+.viewListButton {
+  margin-top: var(--spacing-base);
+  height: 40px;
+  padding: 0 24px;
+  border-radius: var(--radius-base);
+  font-family: var(--font-secondary);
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-medium);
+  border: none;
+  cursor: pointer;
+  transition: all var(--transition-base);
+  background: var(--black-primary);
+  color: var(--background);
+}
+
+.viewListButton:hover {
+  opacity: 0.85;
+}

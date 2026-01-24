@@ -1,0 +1,96 @@
+/* Design tokens extracted from invoice-manager.pen */
+:root {
+  /* Colors - Primary Palette */
+  --background: #FFFFFF;
+  --surface: #FAFAFA;
+  --foreground: #0D0D0D;
+  --black-primary: #0D0D0D;
+  --muted-foreground: #7A7A7A;
+  --border: #E8E8E8;
+  --gray-400: #B0B0B0;
+
+  /* Colors - Brand */
+  --red-primary: #E42313;
+
+  /* Colors - Semantic */
+  --success: #22C55E;
+  --success-dark: #16A34A;
+  --warning: #F59E0B;
+  --warning-dark: #D97706;
+  --error: #EF4444;
+  --error-dark: #DC2626;
+  --info: #3B82F6;
+  --info-dark: #2563EB;
+
+  /* Typography - Font Families */
+  --font-primary: 'Space Grotesk', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-secondary: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+
+  /* Typography - Font Sizes */
+  --font-size-xs: 12px;
+  --font-size-sm: 13px;
+  --font-size-base: 14px;
+  --font-size-md: 16px;
+  --font-size-lg: 18px;
+  --font-size-xl: 20px;
+  --font-size-2xl: 24px;
+  --font-size-3xl: 28px;
+
+  /* Typography - Font Weights */
+  --font-weight-normal: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 700;
+
+  /* Typography - Line Heights */
+  --line-height-tight: 1.2;
+  --line-height-normal: 1.5;
+  --line-height-relaxed: 1.75;
+
+  /* Spacing */
+  --spacing-xs: 4px;
+  --spacing-sm: 8px;
+  --spacing-md: 12px;
+  --spacing-base: 16px;
+  --spacing-lg: 20px;
+  --spacing-xl: 24px;
+  --spacing-2xl: 32px;
+  --spacing-3xl: 40px;
+  --spacing-4xl: 48px;
+
+  /* Layout */
+  --sidebar-width: 240px;
+  --sidebar-padding-x: 32px;
+  --sidebar-padding-y: 40px;
+  --content-padding-x: 48px;
+  --content-padding-y: 40px;
+  --header-height: 64px;
+
+  /* Border Radius */
+  --radius-none: 0;
+  --radius-sm: 2px;
+  --radius-base: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
+  --radius-full: 9999px;
+
+  /* Shadows */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --shadow-base: 0 1px 3px rgba(0, 0, 0, 0.1), 0 1px 2px rgba(0, 0, 0, 0.06);
+  --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.1), 0 2px 4px rgba(0, 0, 0, 0.06);
+  --shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.1), 0 4px 6px rgba(0, 0, 0, 0.05);
+
+  /* Transitions */
+  --transition-fast: 150ms ease;
+  --transition-base: 200ms ease;
+  --transition-slow: 300ms ease;
+
+  /* Z-Index Scale */
+  --z-dropdown: 100;
+  --z-sticky: 200;
+  --z-fixed: 300;
+  --z-modal-backdrop: 400;
+  --z-modal: 500;
+  --z-tooltip: 600;
+}
