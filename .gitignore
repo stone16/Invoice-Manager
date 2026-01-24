@@ -75,6 +75,7 @@ coverage/
 
 # Misc
 *.bak
+*.backup
 *.tmp
 *.temp
 

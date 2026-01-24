@@ -1,0 +1,35 @@
+/* Main Layout Container */
+.layoutContainer {
+  display: flex;
+  min-height: 100vh;
+  background-color: var(--background);
+}
+
+/* Main Content Area */
+.mainContent {
+  flex: 1;
+  margin-left: var(--sidebar-width);
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Content Wrapper */
+.contentWrapper {
+  flex: 1;
+  padding: var(--content-padding-y) var(--content-padding-x);
+}
+
+/* LLM Promo Alert */
+.llmPromoAlert {
+  margin-bottom: var(--spacing-xl);
+}
+
+/* Footer */
+.footer {
+  text-align: center;
+  padding: var(--spacing-base) var(--content-padding-x);
+  color: var(--muted-foreground);
+  font-size: var(--font-size-sm);
+  border-top: 1px solid var(--border);
+}

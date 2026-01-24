@@ -130,6 +130,7 @@ function LLMConfigModal({ open, onClose, onConfigured }: LLMConfigModalProps) {
       model: providerModels[0]?.id || '',
       api_key: '',
       base_url: '',
+      config_token: '',
     });
   };
 
@@ -156,7 +157,8 @@ function LLMConfigModal({ open, onClose, onConfigured }: LLMConfigModalProps) {
         base_url: values.base_url || undefined,
       };
 
-      const result = await configureLLM(config);
+      const configToken = values.config_token?.trim();
+      const result = await configureLLM(config, configToken || undefined);
       if (result.success) {
         message.success(result.message);
         await fetchStatus();
@@ -286,6 +288,7 @@ function LLMConfigModal({ open, onClose, onConfigured }: LLMConfigModalProps) {
             initialValues={{
               provider: selectedProvider || 'openai',
               model: FALLBACK_MODELS[selectedProvider || 'openai']?.[0]?.id || '',
+              config_token: '',
             }}
           >
             <Form.Item
@@ -354,6 +357,14 @@ function LLMConfigModal({ open, onClose, onConfigured }: LLMConfigModalProps) {
                 <Input placeholder="例如: https://api.example.com/v1" />
               </Form.Item>
             )}
+
+            <Form.Item
+              name="config_token"
+              label="管理员令牌 (可选)"
+              tooltip="如后端设置 LLM_CONFIG_TOKEN，请在此输入"
+            >
+              <Input.Password placeholder="输入管理员令牌" />
+            </Form.Item>
 
             <Form.Item style={{ marginBottom: 0, marginTop: 24 }}>
               <Space style={{ width: '100%', justifyContent: 'flex-end' }}>

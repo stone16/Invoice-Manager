@@ -390,7 +390,7 @@ async def get_invoice_file(
     return Response(
         content=invoice.file_data,
         media_type=content_type_map.get(invoice.file_type, "application/octet-stream"),
-        headers={"Content-Disposition": f"inline; filename*=UTF-8''{encoded_filename}"}
+        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{encoded_filename}"}
     )
 
 

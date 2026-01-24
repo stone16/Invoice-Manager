@@ -1,0 +1,38 @@
+.controlBar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--spacing-md);
+  padding: var(--spacing-base) 0;
+}
+
+.leftSection {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+  flex: 1;
+}
+
+.rightSection {
+  display: flex;
+  align-items: center;
+}
+
+.searchInput {
+  width: 240px;
+}
+
+.statusFilter {
+  min-width: 120px;
+}
+
+.dateRange {
+  min-width: 240px;
+}
+
+.totalText {
+  font-family: var(--font-secondary);
+  font-size: var(--font-size-sm);
+  color: var(--muted-foreground);
+  white-space: nowrap;
+}

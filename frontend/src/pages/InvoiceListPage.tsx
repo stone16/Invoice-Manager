@@ -8,7 +8,6 @@ import {
   Space,
   Select,
   Input,
-  DatePicker,
   message,
   Popconfirm,
   Modal,
@@ -22,7 +21,6 @@ import {
   UploadOutlined,
   ReloadOutlined,
   DownloadOutlined,
-  FileExcelOutlined,
   SyncOutlined,
 } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
@@ -33,9 +31,11 @@ import { InvoiceStatus } from '../types/invoice';
 import ResizableTitle from '../components/ResizableTitle';
 import ColumnSelector from '../components/ColumnSelector';
 import { useColumnSettings } from '../hooks/useColumnSettings';
+import { useInvoiceStatistics } from '../hooks/useInvoiceStatistics';
+import MetricCard from '../components/dashboard/MetricCard';
+import ControlBar from '../components/dashboard/ControlBar';
+import styles from './InvoiceListPage.module.css';
 import 'react-resizable/css/styles.css';
-
-const { RangePicker } = DatePicker;
 
 const statusColors: Record<string, string> = {
   '已上传': 'default',
@@ -61,6 +61,7 @@ function InvoiceListPage() {
   const [statusFilter, setStatusFilter] = useState<string | undefined>();
   const [ownerFilter, setOwnerFilter] = useState<string>('');
   const [dateRange, setDateRange] = useState<[dayjs.Dayjs | null, dayjs.Dayjs | null] | null>(null);
+  const [searchValue, setSearchValue] = useState<string>('');
 
   // Column settings
   const {
@@ -79,6 +80,7 @@ function InvoiceListPage() {
       if (ownerFilter) params.owner = ownerFilter;
       if (dateRange?.[0]) params.start_date = dateRange[0].format('YYYY-MM-DD');
       if (dateRange?.[1]) params.end_date = dateRange[1].format('YYYY-MM-DD');
+      if (searchValue) params.invoice_number = searchValue;
 
       const response = await listInvoices(params);
       setInvoices(response.items);
@@ -107,11 +109,31 @@ function InvoiceListPage() {
 
   useEffect(() => {
     fetchInvoices();
-  }, [page, pageSize, statusFilter, ownerFilter, dateRange]);
+  }, [page, pageSize, statusFilter, ownerFilter, dateRange, searchValue]);
 
   useEffect(() => {
     fetchStatistics();
   }, [selectedRowKeys]);
+
+  const handleStatusChange = (value: string | undefined) => {
+    setStatusFilter(value);
+    setPage(1);
+  };
+
+  const handleSearchChange = (value: string) => {
+    setSearchValue(value);
+    setPage(1);
+  };
+
+  const handleDateRangeChange = (range: [dayjs.Dayjs | null, dayjs.Dayjs | null] | null) => {
+    setDateRange(range);
+    setPage(1);
+  };
+
+  const handleOwnerChange = (value: string) => {
+    setOwnerFilter(value);
+    setPage(1);
+  };
 
   const handleDelete = async (id: number) => {
     try {
@@ -493,6 +515,24 @@ function InvoiceListPage() {
     );
   }, [visibleColumns, columnWidths]);
 
+  // Calculate statistics from current page invoices
+  const pageStatistics = useInvoiceStatistics(invoices);
+
+  // Generate total text for control bar
+  const totalPages = useMemo(() => Math.max(1, Math.ceil(total / pageSize)), [total, pageSize]);
+  const displayStart = total === 0 ? 0 : (page - 1) * pageSize + 1;
+  const displayEnd = total === 0 ? 0 : Math.min(page * pageSize, total);
+
+  const totalText = useMemo(() => {
+    return `显示 ${displayStart}-${displayEnd} 条，共 ${total} 条`;
+  }, [displayStart, displayEnd, total]);
+
+  useEffect(() => {
+    if (page > totalPages) {
+      setPage(totalPages);
+    }
+  }, [page, totalPages]);
+
   // Table components with resizable header
   const tableComponents = {
     header: {
@@ -501,10 +541,58 @@ function InvoiceListPage() {
   };
 
   return (
-    <div>
-      {/* Statistics Card */}
+    <div className={styles.pageContainer}>
+      {/* Page Header */}
+      <div className={styles.pageHeader}>
+        <div className={styles.headerContent}>
+          <h1 className={styles.pageTitle}>发票列表</h1>
+          <p className={styles.pageSubtitle}>管理和查看所有发票记录</p>
+        </div>
+        <div className={styles.headerActions}>
+          <Button
+            icon={<DownloadOutlined />}
+            onClick={() => handleExport('excel')}
+            className={styles.secondaryButton}
+          >
+            导出
+          </Button>
+          <Button
+            type="primary"
+            icon={<UploadOutlined />}
+            onClick={() => navigate('/upload')}
+            className={styles.primaryButton}
+          >
+            上传发票
+          </Button>
+        </div>
+      </div>
+
+      {/* Metric Cards */}
+      <div className={styles.metricsSection}>
+        <MetricCard
+          label="发票数量"
+          value={pageStatistics.count}
+        />
+        <MetricCard
+          label="金额合计"
+          value={pageStatistics.totalAmount.toFixed(2)}
+          prefix="¥"
+        />
+        <MetricCard
+          label="税额合计"
+          value={pageStatistics.totalTax.toFixed(2)}
+          prefix="¥"
+        />
+        <MetricCard
+          label="价税合计"
+          value={pageStatistics.totalWithTax.toFixed(2)}
+          prefix="¥"
+        />
+      </div>
+
+      {/* Selected Statistics Card */}
       {statistics && (
-        <Card style={{ marginBottom: 16 }}>
+        <Card style={{ marginBottom: 32 }}>
           <Row gutter={24}>
             <Col span={6}>
               <Statistic title="选中数量" value={statistics.count} suffix="张" />
@@ -537,82 +625,69 @@ function InvoiceListPage() {
         </Card>
       )}
 
-      <Card>
-        {/* Toolbar */}
-        <div style={{ marginBottom: 16, display: 'flex', gap: 16, flexWrap: 'wrap' }}>
-          <Button
-            type="primary"
-            icon={<UploadOutlined />}
-            onClick={() => navigate('/upload')}
-          >
-            上传发票
-          </Button>
+      {/* Control Bar */}
+      <ControlBar
+        searchPlaceholder="搜索发票号码..."
+        searchValue={searchValue}
+        onSearchChange={handleSearchChange}
+        statusFilter={statusFilter}
+        onStatusChange={handleStatusChange}
+        statusOptions={Object.values(InvoiceStatus).map((s) => ({ label: s, value: s }))}
+        dateRange={dateRange}
+        onDateRangeChange={handleDateRangeChange}
+        totalText={totalText}
+      />
 
-          <Select
-            placeholder="全部状态"
-            style={{ width: 120 }}
-            allowClear
-            value={statusFilter}
-            onChange={(val) => setStatusFilter(val || undefined)}
-            options={Object.values(InvoiceStatus).map((s) => ({ label: s, value: s }))}
-          />
+      {/* Additional Controls */}
+      <div className={styles.additionalControls}>
+        <Input
+          placeholder="归属人"
+          style={{ width: 120 }}
+          value={ownerFilter}
+          onChange={(e) => handleOwnerChange(e.target.value)}
+          onPressEnter={fetchInvoices}
+        />
 
-          <Input
-            placeholder="归属人"
-            style={{ width: 120 }}
-            value={ownerFilter}
-            onChange={(e) => setOwnerFilter(e.target.value)}
-            onPressEnter={fetchInvoices}
-          />
+        <Button icon={<ReloadOutlined />} onClick={fetchInvoices}>
+          刷新
+        </Button>
 
-          <RangePicker
-            value={dateRange}
-            onChange={(dates) => setDateRange(dates)}
-          />
+        <Button icon={<DownloadOutlined />} onClick={() => handleExport('csv')}>
+          导出CSV
+        </Button>
 
-          <Button icon={<ReloadOutlined />} onClick={fetchInvoices}>
-            刷新
-          </Button>
+        <ColumnSelector columns={columnConfigs} onChange={setColumnConfigs} />
 
-          <Button icon={<DownloadOutlined />} onClick={() => handleExport('csv')}>
-            导出CSV
-          </Button>
+        {selectedRowKeys.length > 0 && (
+          <>
+            <Select
+              placeholder="批量修改状态"
+              style={{ width: 140 }}
+              onChange={handleBatchUpdate}
+              options={Object.values(InvoiceStatus).map((s) => ({ label: s, value: s }))}
+            />
+            <Button
+              icon={<SyncOutlined />}
+              onClick={handleBatchReprocess}
+            >
+              重新解析
+            </Button>
+            <Button
+              danger
+              icon={<DeleteOutlined />}
+              onClick={handleBatchDelete}
+            >
+              批量删除
+            </Button>
+            <span style={{ lineHeight: '32px' }}>
+              已选择 {selectedRowKeys.length} 项
+            </span>
+          </>
+        )}
+      </div>
 
-          <Button icon={<FileExcelOutlined />} onClick={() => handleExport('excel')}>
-            导出Excel
-          </Button>
-
-          <ColumnSelector columns={columnConfigs} onChange={setColumnConfigs} />
-
-          {selectedRowKeys.length > 0 && (
-            <>
-              <Select
-                placeholder="批量修改状态"
-                style={{ width: 140 }}
-                onChange={handleBatchUpdate}
-                options={Object.values(InvoiceStatus).map((s) => ({ label: s, value: s }))}
-              />
-              <Button
-                icon={<SyncOutlined />}
-                onClick={handleBatchReprocess}
-              >
-                重新解析
-              </Button>
-              <Button
-                danger
-                icon={<DeleteOutlined />}
-                onClick={handleBatchDelete}
-              >
-                批量删除
-              </Button>
-              <span style={{ lineHeight: '32px' }}>
-                已选择 {selectedRowKeys.length} 项
-              </span>
-            </>
-          )}
-        </div>
-
-        {/* Table */}
+      {/* Table */}
+      <div className={styles.tableContainer}>
         <Table
           rowKey="id"
           loading={loading}
@@ -623,20 +698,51 @@ function InvoiceListPage() {
             selectedRowKeys,
             onChange: (keys) => setSelectedRowKeys(keys as number[]),
           }}
-          pagination={{
-            current: page,
-            pageSize,
-            total,
-            showSizeChanger: true,
-            showTotal: (t) => `共 ${t} 条`,
-            onChange: (p, ps) => {
-              setPage(p);
-              setPageSize(ps);
-            },
-          }}
+          pagination={false}
           scroll={{ x: scrollX }}
+          className={styles.invoiceTable}
         />
-      </Card>
+      </div>
+
+      {/* Custom Pagination */}
+      <div className={styles.paginationRow}>
+        <div className={styles.paginationLeft}>
+          <span className={styles.paginationText}>
+            显示 {displayStart}-{displayEnd} 共 {total} 条
+          </span>
+        </div>
+        <div className={styles.paginationRight}>
+          <Button
+            disabled={page === 1}
+            onClick={() => setPage(page - 1)}
+          >
+            上一页
+          </Button>
+          <span className={styles.pageNumbers}>
+            {page} / {totalPages}
+          </span>
+          <Button
+            disabled={page >= totalPages}
+            onClick={() => setPage(page + 1)}
+          >
+            下一页
+          </Button>
+          <Select
+            value={pageSize}
+            onChange={(val) => {
+              setPageSize(val);
+              setPage(1);
+            }}
+            options={[
+              { label: '10 条/页', value: 10 },
+              { label: '20 条/页', value: 20 },
+              { label: '50 条/页', value: 50 },
+              { label: '100 条/页', value: 100 },
+            ]}
+            style={{ width: 120, marginLeft: 12 }}
+          />
+        </div>
+      </div>
     </div>
   );
 }

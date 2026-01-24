@@ -1,0 +1,181 @@
+/* Sidebar Container */
+.sidebar {
+  width: var(--sidebar-width);
+  height: 100vh;
+  background-color: var(--background);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: var(--sidebar-padding-y) var(--sidebar-padding-x);
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: var(--z-fixed);
+}
+
+/* Sidebar Top Section */
+.sidebarTop {
+  display: flex;
+  flex-direction: column;
+  gap: 48px;
+}
+
+/* Logo Section */
+.logo {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.logoMark {
+  width: 28px;
+  height: 28px;
+  background-color: var(--red-primary);
+  border-radius: var(--radius-base);
+}
+
+.logoText {
+  font-family: var(--font-primary);
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-semibold);
+  color: var(--foreground);
+}
+
+/* Navigation Section */
+.navigation {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.navItem {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 0;
+  cursor: pointer;
+  text-decoration: none;
+  transition: color var(--transition-fast);
+}
+
+.navItem:hover .navLabel {
+  color: var(--foreground);
+}
+
+.navItem:focus-visible {
+  outline: 2px solid var(--red-primary);
+  outline-offset: 2px;
+}
+
+.navDot {
+  width: 6px;
+  height: 6px;
+  border-radius: var(--radius-full);
+  background-color: transparent;
+  flex-shrink: 0;
+}
+
+.navItem.active .navDot {
+  background-color: var(--red-primary);
+}
+
+.navLabel {
+  font-family: var(--font-primary);
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-normal);
+  color: var(--muted-foreground);
+  transition: color var(--transition-fast);
+}
+
+.navItem.active .navLabel {
+  color: var(--foreground);
+  font-weight: var(--font-weight-medium);
+}
+
+/* Sidebar Bottom Section */
+.sidebarBottom {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+/* User Profile Section */
+.userProfile {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.userAvatar {
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-full);
+  background-color: var(--black-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.userInitial {
+  font-family: var(--font-primary);
+  font-size: 11px;
+  font-weight: var(--font-weight-medium);
+  color: var(--background);
+}
+
+.userInfo {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.userName {
+  font-family: var(--font-primary);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--foreground);
+}
+
+.userRole {
+  font-family: var(--font-secondary);
+  font-size: 11px;
+  font-weight: var(--font-weight-normal);
+  color: var(--muted-foreground);
+}
+
+/* LLM Config Button */
+.llmConfigButton {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background-color: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-base);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.llmConfigButton:hover {
+  border-color: var(--red-primary);
+}
+
+.llmConfigButton .statusIcon {
+  font-size: 16px;
+}
+
+.llmConfigButton .statusIcon.configured {
+  color: var(--success);
+}
+
+.llmConfigButton .statusIcon.notConfigured {
+  color: var(--warning);
+}
+
+.llmConfigButton .configText {
+  font-family: var(--font-secondary);
+  font-size: var(--font-size-xs);
+  color: var(--muted-foreground);
+}

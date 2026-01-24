@@ -97,7 +97,7 @@ def get_models_by_provider(provider: str) -> list[dict]:
         "google": ["google/"],
         "qwen": ["qwen/"],
         "deepseek": ["deepseek/"],
-        "zhipu": ["thudm/"],  # Zhipu models are under "thudm" on OpenRouter
+        "zhipu": ["z-ai/"],  # Zhipu GLM models are under "z-ai" on OpenRouter
     }
 
     prefixes = provider_prefixes.get(provider_lower, [f"{provider_lower}/"])
@@ -195,9 +195,14 @@ FALLBACK_MODELS = {
         {"id": "deepseek/deepseek-chat", "name": "DeepSeek Chat", "vision": False},
         {"id": "deepseek/deepseek-r1", "name": "DeepSeek R1", "vision": False},
     ],
+    # Zhipu uses native SDK, so model IDs are Zhipu's native format (not OpenRouter)
     "zhipu": [
-        {"id": "thudm/glm-4v", "name": "GLM-4V", "vision": True},
-        {"id": "thudm/glm-4", "name": "GLM-4", "vision": False},
+        {"id": "glm-4v-plus", "name": "GLM-4V Plus (视觉增强)", "vision": True},
+        {"id": "glm-4v", "name": "GLM-4V (视觉)", "vision": True},
+        {"id": "glm-4-plus", "name": "GLM-4 Plus (增强)", "vision": False},
+        {"id": "glm-4-flash", "name": "GLM-4 Flash (快速)", "vision": False},
+        {"id": "glm-4-air", "name": "GLM-4 Air (经济)", "vision": False},
+        {"id": "glm-4", "name": "GLM-4 (标准)", "vision": False},
     ],
 }
 
@@ -215,12 +220,22 @@ def get_models_with_fallback(
     Returns:
         List of model dictionaries
     """
-    # Try OpenRouter first
+    provider_lower = provider.lower()
+
+    # Zhipu uses native SDK with different model IDs than OpenRouter
+    # Always use the hardcoded list for Zhipu
+    if provider_lower == "zhipu":
+        fallback = FALLBACK_MODELS.get(provider_lower, [])
+        if vision_only:
+            return [m for m in fallback if m.get("vision", False)]
+        return fallback
+
+    # Try OpenRouter first for other providers
     models = get_formatted_models_for_provider(provider, vision_only)
 
     # Fall back to hardcoded list if OpenRouter returns nothing
     if not models:
-        fallback = FALLBACK_MODELS.get(provider.lower(), [])
+        fallback = FALLBACK_MODELS.get(provider_lower, [])
         if vision_only:
             models = [m for m in fallback if m.get("vision", False)]
         else:
